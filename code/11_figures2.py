@@ -1,4 +1,6 @@
-"""Model-study figures and tables from results/models/*.json + predictions."""
+"""Model-study figures and tables from results/models/{model_metrics,interpretation,
+supplement}.json, plus data/processed/ml_dataset.parquet (from 08_features.py) for
+the fig2_2 correction curves."""
 import json
 from pathlib import Path
 
@@ -210,5 +212,6 @@ fig.tight_layout()
 fig.savefig(f"{FIG}/fig2_6_horizon_gains.png", bbox_inches="tight")
 plt.close(fig)
 
-open(f"{ROOT}/results/models/tables.md", "w").write("\n".join(out))
+with open(f"{ROOT}/results/models/tables.md", "w", encoding="utf-8") as f:
+    f.write("\n".join(out))
 print("figures ->", FIG, "| tables -> results/models/tables.md")

@@ -149,7 +149,7 @@ class SamplePipelineTests(unittest.TestCase):
                 slope = record["regressions"]["logodds"]
                 self.assertTrue(np.isfinite(slope["b"]) and slope["se_b"] > 0)
         self.assertEqual(set(saved["backtest"]), {"h7", "h30"})
-        tables = (self.work / "results" / "tables.md").read_text()
+        tables = (self.work / "results" / "tables.md").read_text(encoding="utf-8")
         self.assertIn(f"| 7 | {counts[7]} |", tables)
 
     def test_feature_snapshots_use_only_quotes_at_or_before_the_snapshot(self):

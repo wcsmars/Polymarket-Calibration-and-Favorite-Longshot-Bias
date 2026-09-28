@@ -13,6 +13,7 @@ Usage:
   python sample/run_sample.py --workdir DIR   # DIR must be new or empty
 """
 import argparse
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -37,8 +38,11 @@ def run(workdir, stages=STAGES, echo=False):
         shutil.copy2(script, workdir / "code" / script.name)
 
     def call(stage):
+        # The stages print Greek letters and symbols; keep piped output UTF-8
+        # on platforms whose default encoding is not (for example Windows).
         done = subprocess.run([sys.executable, str(workdir / "code" / f"{stage}.py")],
-                              cwd=workdir, capture_output=True, text=True)
+                              cwd=workdir, capture_output=True, encoding="utf-8",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         if done.returncode:
             raise RuntimeError(f"{stage} failed:\n{done.stdout}{done.stderr}")
         if echo:
@@ -58,6 +62,10 @@ def main():
     parser.add_argument("--workdir", type=Path,
                         help="new or empty directory for the run (default: a temporary one)")
     args = parser.parse_args()
+    # The echoed stage output includes Greek letters; do not fail on consoles
+    # or redirected output that cannot encode them.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
     workdir = args.workdir or Path(tempfile.mkdtemp(prefix="polymarket-sample-"))
     run(workdir, echo=True)
     print(f"Sample run complete. Outputs are in {workdir}")

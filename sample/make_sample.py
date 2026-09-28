@@ -21,11 +21,12 @@ one YES among several candidates) update a Dirichlet prior with daily Gaussian
 signals. Quoted prices shrink the calibrated log-odds by 1 / FLB_SLOPE, which
 plants a favorite-longshot bias, then add small noise and round to 0.001.
 
-Some rows are built to fail exactly one inclusion filter of
-code/03_build_sample.py, in filter order, so every sample-construction count is
-exercised. Price histories exist only for markets that pass (02 fetches prices
-after 03). They include failed (n = -1), empty and single-point records, and
-multi-day gaps that trip the 1.5-day staleness limit.
+Some rows are planted so that each is removed at a chosen step of
+code/03_build_sample.py's sequential filters (the first filter it fails), so
+every sample-construction count is exercised. Price histories exist only for
+markets that pass (02 fetches prices after 03). They include failed (n = -1),
+empty and single-point records, and multi-day gaps that trip the 1.5-day
+staleness limit.
 
 Usage: python sample/make_sample.py   (rewrites both files in sample/)
 """
@@ -310,7 +311,7 @@ def build(seed=SEED):
         b.crypto_daily(float(rng.uniform(2.6, 3.6)))
     eligible = list(b.markets)
 
-    # Planted exclusions, each failing one filter of 03 in its filter order.
+    # Planted exclusions, each removed first by a chosen filter of 03 (filters run in order).
     cats = list(mix)
     pick_cat = lambda: cats[int(rng.integers(len(cats)))]
     planted = {}

@@ -3,7 +3,9 @@
 Run from the project root: python -m unittest discover -s tests -v
 These small synthetic checks do not rerun or independently validate the study.
 """
+from datetime import datetime, timedelta, timezone
 import importlib.util
+import io
 import json
 import math
 from pathlib import Path
@@ -176,6 +178,27 @@ class CollectionTests(unittest.TestCase):
                 fetcher.get({"closed": "true"}, retries=2)
         self.assertEqual(run.call_count, 2)
         sleep.assert_called_once()
+
+    def test_crowded_windows_split_repeatedly_without_losing_markets(self):
+        start = datetime(2025, 4, 1, tzinfo=timezone.utc)
+        ends = [start + timedelta(days=30) * (i + 0.5) / 1000 for i in range(1000)]
+        markets = [{"id": str(i), "endDate": end.isoformat()} for i, end in enumerate(ends)]
+
+        def fake_get(params):
+            low = fetcher._utc(params["end_date_min"])
+            high = fetcher._utc(params["end_date_max"])
+            hits = [m for m, end in zip(markets, ends) if low <= end < high]
+            return hits[params["offset"]:params["offset"] + params["limit"]]
+
+        out = io.StringIO()
+        # A 200-row cap forces three levels of splitting on 1,000 markets.
+        with patch.object(fetcher, "get", side_effect=fake_get), \
+                patch.object(fetcher, "MAX_OFFSET", 200), \
+                patch("builtins.print"):
+            n_new = fetcher.fetch_window("2025-04-01", "2025-05-01", set(), out)
+        saved = [json.loads(line)["id"] for line in out.getvalue().splitlines()]
+        self.assertEqual(n_new, len(markets))
+        self.assertEqual(sorted(saved, key=int), [m["id"] for m in markets])
 
 
 if __name__ == "__main__":

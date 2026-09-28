@@ -18,7 +18,7 @@ features.
 2. Do prices carry systematic biases, such as a favorite–longshot bias or a
    premium on the YES side?
 3. Can simple strategies that trade against those biases make money after a
-   1¢ spread?
+   1¢ per-contract trading cost?
 4. Can recalibration or a machine-learning model beat the market price out of
    sample, and does trading on model–price disagreement survive costs?
 
@@ -53,7 +53,9 @@ stages, so a stage can be rerun on its own once its inputs exist.
 The historical sample contains 26,896 markets with usable price histories, of
 which 26,887 contribute 83,773 market–horizon observations to the calibration
 panel. Scheduled end dates are restricted to July 31, 2025 or earlier, with a
-lifetime-volume threshold of $1,000. This retrospective filter limits the
+lifetime-volume threshold of $1,000. Markets listed for less than 1.5 days
+before the closure-time proxy are also excluded (3,745 markets, leaving 27,359
+before price-history screening). These retrospective filters limit the
 population to which results apply.
 
 ### Calibration and trading after costs
@@ -72,9 +74,11 @@ at seven horizons from 1 to 90 days (26,874 markets at 1 day, 2,463 at 90).
   often than their prices imply one day out, and 10.5 points less at 90 days.
 - **The biases are not reliably tradable after costs.** Buying NO on
   longshots priced 1–10% seven days out returns 1.2% per trade before costs
-  (event-clustered t = 4.5) and 0.1% after a 1¢ spread (t = 0.5). Six
-  net-of-cost tests cover buying favorites priced 90–99% and fading longshots,
-  at 7 and 30 days, plus a 30-day schedule-anchored check. Only the 30-day
+  (event-clustered t = 4.5) and 0.1% after costs (t = 0.5). Costs are a flat
+  1¢ per contract added to the price paid; see
+  [Backtest design](#backtest-design). Six net-of-cost tests cover buying
+  favorites priced 90–99% and fading longshots, at 7 and 30 days, plus a
+  30-day schedule-anchored check. Only the 30-day
   longshot fade keeps an event-clustered t above 2 after costs (+0.9% per
   trade, t = 2.8), and it falls to +0.6% (t = 1.7) when quotes are anchored to
   scheduled end dates. Weighting months equally, the six net monthly-mean
@@ -109,8 +113,8 @@ vary by horizon and by scheduled-end versus closure-time-proxy anchoring.
 Trading on model–price disagreement does not reliably survive costs either.
 Using the schedule-anchored out-of-sample predictions, the backtest buys the
 side the full GBM favors whenever its forecast differs from the price by more
-than 2, 5 or 10 points. After a 1¢ spread, the pooled event-clustered t is 2.4
-at the 10-point threshold (+6.3% per trade), but the monthly-mean t-statistic
+than 2, 5 or 10 points. After the same 1¢ cost, the pooled event-clustered t
+is 2.4 at the 10-point threshold (+6.3% per trade), but the monthly-mean t-statistic
 ranges from −1.2 to 0.2 across the three thresholds, so the gains are not
 consistent from month to month.
 
@@ -128,6 +132,32 @@ full historical study.
 
 The model-comparison error bars use event-clustered standard errors. They do not
 represent the equal-month inference described above.
+
+### Backtest design
+
+Both backtests are per-trade tests of a signal, not a managed portfolio.
+
+- **Signal and entry.** The calibration backtests buy YES on every market
+  priced 90–99% and buy NO on every market priced 1–10%, 7 or 30 days before
+  the closure-time proxy (the schedule-anchored check uses 30 days before the
+  scheduled end). The divergence backtest buys the side the full GBM favors
+  whenever its out-of-sample forecast differs from the price by more than the
+  threshold.
+- **Execution and costs.** Each trade enters at that day's price plus a flat
+  1¢ per contract (buying NO at 1 − p costs 1 − p + 0.01) and is held to
+  resolution, so there is no exit trade. Daily prices are not bid/ask quotes,
+  so these are price-based fills, not executable ones.
+- **Sizing.** Every qualifying market–horizon observation is one equal unit
+  stake, with no compounding, capital limit or position cap. Several markets
+  from the same event can be held at once.
+- **Risk and inference.** A trade returns its payoff divided by its cost,
+  minus 1, so a losing trade loses the whole stake. After costs the longshot
+  fades profit on about 95–96% of trades and lose the whole stake on 2–3%,
+  when the longshot resolves YES. The remaining 1–2.5% are bought at a 1%
+  price, so NO costs exactly $1 and only breaks even. No stop-losses or
+  exposure limits are modelled. Dependence between markets is
+  handled in the inference instead: standard errors are clustered by event,
+  and a second test weights months equally (the monthly-mean t).
 
 ## Run offline checks
 
@@ -176,8 +206,9 @@ is Polymarket data, and statistics computed from it are not research results.
 
 Prices follow a latent-path model in which each quote starts as a calibrated
 probability. The generator then plants a favorite–longshot bias: true log-odds
-are 1.1 times the quoted log-odds. Some metadata rows each fail exactly one
-inclusion filter in `03`. Some histories are failed, empty, single-print or
+are 1.1 times the quoted log-odds. Some metadata rows are planted so that each
+is removed at a chosen step of `03`'s sequential filters (the first filter it
+fails). Some histories are failed, empty, single-print or
 gapped. Together they exercise every sample-construction count and the
 1.5-day staleness limit.
 
@@ -248,8 +279,11 @@ python code/11_figures2.py
 Run `12` before `11`, because the figure/table script reads `supplement.json`.
 The model stage repeatedly fits the model ladder for both date anchorings.
 Random seeds are set to 42; numerical results can vary across library builds
-and platforms. Pipeline runs overwrite generated results and figures, so keep
-the included aggregates in a separate copy when comparing a new run.
+and platforms. In September 2026 a full rerun of stages `03`–`12` from the
+original inputs, with Python 3.11.7 and the pinned dependencies on macOS,
+reproduced every included result file and figure byte for byte. Pipeline runs
+overwrite generated results and figures, so keep the included aggregates in a
+separate copy when comparing a new run.
 
 ## Design and limits
 

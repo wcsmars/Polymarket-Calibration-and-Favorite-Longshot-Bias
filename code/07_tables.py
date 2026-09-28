@@ -1,7 +1,11 @@
 """Render calibration-study markdown tables from results/analysis.json."""
 import json
 from pathlib import Path
+import sys
 
+# The preview below prints Greek letters; do not fail on consoles that cannot show them.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="backslashreplace")
 ROOT = Path(__file__).resolve().parents[1]
 r = json.load(open(f"{ROOT}/results/analysis.json"))
 out = []
@@ -110,6 +114,7 @@ if bs:
         out.append(f"- {k.replace('_',' ')}: {g['n_trades']:,} trades, gross {100*g['mean_ret']:+.2f}% "
                    f"(t={g['t']:.2f}), net-1¢ {100*n['mean_ret']:+.2f}% (t={n['t']:.2f}), win {100*g['win_rate']:.1f}%")
 
-open(f"{ROOT}/results/tables.md", "w").write("\n".join(out))
+with open(f"{ROOT}/results/tables.md", "w", encoding="utf-8") as f:
+    f.write("\n".join(out))
 print("\n".join(out[:30]))
 print(f"\n... written to results/tables.md")

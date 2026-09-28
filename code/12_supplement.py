@@ -1,5 +1,6 @@
 """Model-study supplementary diagnostics:
-(a) mature-fold analysis: ΔBrier for test months >= 2024-07 (post-learning-curve)
+(a) mature-fold analysis: ΔBrier on the second half of each anchor's test months
+    (midpoint split: >= 2024-07 for sched, >= 2024-08 for res; post-learning-curve)
 (b) forecast-combination: OOS Brier of blends (1-l)*p + l*model, l grid
 (c) per-horizon results for the price-only recalibrations, not just GBM
 """

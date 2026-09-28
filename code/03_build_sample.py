@@ -1,10 +1,13 @@
 """Build the study sample from raw market metadata.
 
-Inclusion criteria:
+Inclusion criteria, applied in this order:
   - binary Yes/No market, resolved cleanly to 0 or 1
   - order-book (CLOB) market with token ids
   - parseable closure-time proxy (closedTime, falling back to endDate)
+  - parseable scheduled end date (endDate) on or before END_CUTOFF
   - lifetime volume >= MIN_VOLUME
+  - at least 1.5 days from createdAt to the closure-time proxy (markets
+    without createdAt are kept); like the proxy, this filter is retrospective
 Outputs data/processed/sample_markets.csv and prints sample-construction
 counts that document sample construction.
 """

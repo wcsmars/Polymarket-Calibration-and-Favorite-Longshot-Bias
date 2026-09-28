@@ -13,7 +13,7 @@ import random
 import time
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = f"{ROOT}/data/raw/markets_meta.jsonl"
@@ -68,10 +68,17 @@ def month_windows(start_year=2020, end_year=2030):
             for i in range(len(months) - 1)]
 
 
+def _utc(bound):
+    """Parse a window bound ('2024-01-01' or '2024-01-16T12:00:00Z') as UTC."""
+    t = datetime.fromisoformat(bound.replace("Z", "+00:00"))
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
 def midpoint(d1, d2):
-    from datetime import datetime
-    a = datetime.fromisoformat(d1)
-    b = datetime.fromisoformat(d2)
+    a, b = _utc(d1), _utc(d2)
+    if b - a < timedelta(seconds=2):
+        raise RuntimeError(f"window {d1}..{d2} cannot be split further; "
+                           "too many markets share one end time")
     mid = a + (b - a) / 2
     return mid.strftime("%Y-%m-%dT%H:%M:%SZ")
 

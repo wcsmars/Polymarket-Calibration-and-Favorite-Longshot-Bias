@@ -17,7 +17,8 @@ See the README limitations before interpreting these as point-in-time results.
   gbm_full   : + text features (TF-IDF/SVD fit on burn-in training data only)
 
 Saves per-row out-of-sample predictions to results/models/predictions_{anchor}.parquet
-and fold/pooled metrics to results/models/model_metrics.json.
+and pooled and per-horizon metrics to results/models/model_metrics.json (per-fold
+train/test sizes are printed only).
 """
 import json
 from pathlib import Path
