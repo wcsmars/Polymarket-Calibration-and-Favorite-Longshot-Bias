@@ -1,13 +1,13 @@
-"""Fetch daily price history for sampled resolved markets from the CLOB API.
+"""Fetch daily YES-token history for the sampled resolved markets.
 
-Reads data/processed/sample_markets.csv (built by 03_build_sample.py),
-fetches /prices-history for the YES token of each market at daily fidelity,
-and appends one JSON line per market to data/raw/price_histories.jsonl.
-Skips markets already present (resumable). Uses a small thread pool.
+Appends validated histories to data/raw/price_histories.jsonl. Successful
+records, including genuine empty histories, are skipped on resume; failed
+requests are retried. Collection never overwrites the earlier raw records.
 """
 import json
+from http.client import HTTPException
 from pathlib import Path
-import os
+import sys
 import threading
 import time
 import urllib.request
@@ -16,29 +16,33 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import load_histories, market_id, normalize_history, prepare_append
+
 BASE = "https://clob.polymarket.com/prices-history"
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = f"{ROOT}/data/processed/sample_markets.csv"
 OUT = f"{ROOT}/data/raw/price_histories.jsonl"
 WORKERS = 12
 
-lock = threading.Lock()
-done_count = 0
-
 
 def fetch_history(token_id, retries=6):
+    if retries < 1:
+        raise ValueError("retries must be positive")
     params = urllib.parse.urlencode({
-        "market": token_id,
-        "interval": "max",
-        "fidelity": 1440,
+        "market": market_id(token_id), "interval": "max", "fidelity": 1440,
     })
     url = f"{BASE}?{params}"
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "research-script/1.0"})
-            with urllib.request.urlopen(req, timeout=45) as r:
-                return json.loads(r.read().decode()).get("history", [])
-        except Exception as e:
+            with urllib.request.urlopen(req, timeout=45) as response:
+                payload = json.loads(response.read().decode())
+            if not isinstance(payload, dict) or "history" not in payload:
+                raise ValueError("price response is missing history")
+            history = normalize_history(payload["history"])
+            return [{"t": int(t), "p": float(p)} for t, p in history]
+        except (OSError, HTTPException, ValueError, TypeError):
             if attempt == retries - 1:
                 return None
             time.sleep(min(2 ** attempt, 30))
@@ -47,37 +51,38 @@ def fetch_history(token_id, retries=6):
 
 def main():
     df = pd.read_csv(SAMPLE, dtype={"id": str, "yes_token": str})
-    seen = set()
-    if os.path.exists(OUT):
-        with open(OUT) as f:
-            for line in f:
-                try:
-                    seen.add(json.loads(line)["id"])
-                except Exception:
-                    pass
+    for column in ["id", "yes_token"]:
+        df[column] = df[column].map(market_id)
+    if df["id"].duplicated().any():
+        raise ValueError("sample contains duplicate market IDs")
+    prepare_append(OUT)
+    seen = set(load_histories(OUT)) if Path(OUT).exists() else set()
     todo = df[~df["id"].isin(seen)]
     total = len(todo)
-    print(f"{len(seen)} already fetched, {total} to go", flush=True)
-
-    out_f = open(OUT, "a")
-
-    def work(row):
-        global done_count
-        hist = fetch_history(row.yes_token)
-        rec = {"id": row.id, "n": len(hist) if hist is not None else -1,
-               "history": [[int(h["t"]), round(float(h["p"]), 4)] for h in hist] if hist else []}
-        with lock:
-            out_f.write(json.dumps(rec) + "\n")
-            done_count += 1
-            if done_count % 500 == 0:
+    print(f"{len(seen)} successfully fetched, {total} to go", flush=True)
+    done_count = 0
+    failed_count = 0
+    lock = threading.Lock()
+    with open(OUT, "a", encoding="utf-8") as out_f:
+        def work(row):
+            nonlocal done_count, failed_count
+            history = fetch_history(row.yes_token)
+            record = {"id": row.id, "n": len(history) if history is not None else -1,
+                      "history": [[h["t"], h["p"]] for h in history] if history else []}
+            with lock:
+                out_f.write(json.dumps(record, allow_nan=False) + "\n")
                 out_f.flush()
-                print(f"{done_count}/{total} fetched", flush=True)
+                done_count += 1
+                failed_count += history is None
+                if done_count % 500 == 0:
+                    print(f"{done_count}/{total} fetched", flush=True)
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        list(ex.map(work, todo.itertuples(index=False)))
-
-    out_f.close()
-    print(f"DONE: {done_count} new histories appended to {OUT}", flush=True)
+        with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+            for _ in executor.map(work, todo.itertuples(index=False)):
+                pass
+    print(f"DONE: {done_count} attempted, {failed_count} failed; records appended to {OUT}", flush=True)
+    if failed_count:
+        raise RuntimeError(f"{failed_count} price requests failed; rerun to retry these markets")
 
 
 if __name__ == "__main__":

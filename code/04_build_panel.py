@@ -9,11 +9,14 @@ markets whose closure-time proxy is within two days of their scheduled end.
 Output: data/processed/panel.csv (long: one row per market-horizon) and
 data/processed/market_level.csv (one row per market with extras).
 """
-import json
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import load_histories
 
 ROOT = Path(__file__).resolve().parents[1]
 HORIZONS = [1, 3, 7, 14, 30, 60, 90]
@@ -28,12 +31,7 @@ def main():
     sample["t_created"] = pd.to_datetime(sample["t_created"], utc=True, format="mixed")
     sample["t_end"] = pd.to_datetime(sample["t_end"], utc=True, format="mixed")
 
-    hist = {}
-    with open(f"{ROOT}/data/raw/price_histories.jsonl") as f:
-        for line in f:
-            rec = json.loads(line)
-            if rec["n"] > 0:
-                hist[rec["id"]] = np.array(rec["history"], dtype=float)
+    hist = load_histories(ROOT / "data/raw/price_histories.jsonl")
 
     rows = []
     mkt_rows = []
@@ -50,8 +48,10 @@ def main():
 
         def standing_price(target):
             """Latest observation at or before target, if fresh enough."""
+            if not (t_created <= target < t_res):
+                return np.nan
             idx = np.searchsorted(ts, target, side="right") - 1
-            if idx < 0:
+            if idx < 0 or ts[idx] < t_created:
                 return np.nan
             if target - ts[idx] > STALE_TOL:
                 return np.nan
@@ -67,8 +67,8 @@ def main():
         # schedule-anchored standing prices: quote h days before the SCHEDULED
         # end, using a recent observation at or before the anchor. These
         # retrospectively collected timestamps do not establish metadata
-        # availability at the original forecast date. No filter here requires
-        # the scheduled anchor to precede the closure-time proxy.
+        # availability at the original forecast date. Every anchor must precede
+        # the closure-time proxy and must not precede market creation.
         p_sched = {}
         if np.isfinite(t_end):
             for h in HORIZONS:
@@ -88,7 +88,10 @@ def main():
                           labels=["2022-23", "2024", "2025-26"])
     panel.to_csv(f"{ROOT}/data/processed/panel.csv", index=False)
 
-    mkt = pd.DataFrame(mkt_rows).merge(
+    mkt = pd.DataFrame(mkt_rows, columns=[
+        "id", "life_days", "ran_to_schedule", "p_mid",
+        *[f"p_sched_{h}" for h in HORIZONS],
+    ]).merge(
         sample[["id", "y", "cat", "volumeNum", "event_id", "t_res"]], on="id", how="left")
     mkt.to_csv(f"{ROOT}/data/processed/market_level.csv", index=False)
 

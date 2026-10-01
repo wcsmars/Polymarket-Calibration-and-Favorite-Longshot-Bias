@@ -7,15 +7,18 @@ Feature timing rules:
   - Path features use ONLY observations with t <= tau.
   - No lifetime volume / current liquidity (post-snapshot info).
 The closure-time proxy t_res uses closedTime, falling back to endDate.
-Scheduled snapshots are not filtered to precede this proxy. Metadata is
-collected retrospectively; see the README timing limitations.
+Snapshots must precede this proxy and not precede market creation. Metadata
+is collected retrospectively; see the README timing limitations.
 Output: data/processed/ml_dataset.parquet
 """
-import json
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import load_histories, parse_flag
 
 ROOT = Path(__file__).resolve().parents[1]
 HORIZONS = [1, 3, 7, 14, 30, 60, 90]
@@ -67,33 +70,42 @@ def main():
     for c in ["t_res", "t_created", "t_end"]:
         sample[c] = pd.to_datetime(sample[c], utc=True, format="mixed")
     sample["event_id"] = sample["event_id"].fillna("mkt_" + sample["id"])
-    ev_size = sample.groupby("event_id")["id"].transform("count")
-    sample["event_n_markets"] = ev_size
 
-    hist = {}
-    with open(f"{ROOT}/data/raw/price_histories.jsonl") as f:
-        for line in f:
-            rec = json.loads(line)
-            if rec["n"] > 1:
-                a = np.array(rec["history"], dtype=float)
-                hist[rec["id"]] = (a[:, 0], a[:, 1])
+    hist = load_histories(ROOT / "data/raw/price_histories.jsonl")
+    # Event size is observable only as siblings appear. The final event's
+    # market count would leak markets created after the forecast snapshot.
+    event_available = {}
+    for market in sample.itertuples(index=False):
+        available = market.t_created.timestamp() if pd.notna(market.t_created) else np.nan
+        history = hist.get(market.id)
+        if not np.isfinite(available) and history is not None and len(history):
+            available = history[0, 0]
+        if np.isfinite(available):
+            event_available.setdefault(market.event_id, []).append(available)
+    event_available = {event: np.sort(times) for event, times in event_available.items()}
 
     rows = []
     for r in sample.itertuples(index=False):
         h_arr = hist.get(r.id)
-        if h_arr is None:
+        if h_arr is None or len(h_arr) < 2:
             continue
-        ts, ps = h_arr
+        ts, ps = h_arr[:, 0], h_arr[:, 1]
         t_res = r.t_res.timestamp()
         t_end = r.t_end.timestamp() if pd.notna(r.t_end) else np.nan
         t_created = r.t_created.timestamp() if pd.notna(r.t_created) else ts[0]
+        # Discard quotes dated before creation, even if a malformed history
+        # includes them. They cannot be part of this market's information set.
+        usable = ts >= t_created
+        ts, ps = ts[usable], ps[usable]
         q = (r.question or "") if isinstance(r.question, str) else ""
         ql = q.lower()
+        # A stale scheduled date can predate market creation. Such metadata
+        # cannot define a lifetime or its elapsed fraction, even for res rows.
+        sched_life = (t_end - t_created) / DAY if np.isfinite(t_end) and t_end > t_created else np.nan
         static = {
             "id": r.id, "event_id": r.event_id, "y": int(r.y), "cat": r.cat,
-            "neg_risk": bool(r.event_neg_risk) or bool(r.negRisk is True),
-            "event_n_markets": int(r.event_n_markets),
-            "sched_life_days": (t_end - t_created) / DAY if np.isfinite(t_end) else np.nan,
+            "neg_risk": parse_flag(r.event_neg_risk) or parse_flag(r.negRisk),
+            "sched_life_days": sched_life,
             "q_len_words": len(q.split()),
             "q_has_by": int(" by " in ql or ql.startswith("by ")),
             "q_starts_will": int(ql.startswith("will")),
@@ -106,16 +118,22 @@ def main():
                 continue
             for h in HORIZONS:
                 tau = t0 - h * DAY
+                if not (t_created <= tau < t_res):
+                    continue
                 feats = path_features(ts, ps, tau)
                 if feats is None:
                     continue
                 rows.append({
                     **static, **feats, "anchor": anchor, "h": h,
+                    "event_n_markets": int(np.searchsorted(
+                        event_available[r.event_id], tau, side="right")),
                     "snap_ts": tau,
-                    "frac_life": feats["days_live"] / max(static["sched_life_days"], 0.1)
+                    "frac_life": feats["days_live"] / static["sched_life_days"]
                     if np.isfinite(static["sched_life_days"]) else np.nan,
                 })
 
+    if not rows:
+        raise ValueError("No usable forecast snapshots; inspect sample dates and price histories")
     df = pd.DataFrame(rows)
     df["snap_month"] = pd.to_datetime(df["snap_ts"], unit="s", utc=True).dt.to_period("M").astype(str)
     df["logit_p"] = np.log(df["p"] / (1 - df["p"]))

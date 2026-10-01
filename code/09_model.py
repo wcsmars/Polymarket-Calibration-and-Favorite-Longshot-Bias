@@ -4,8 +4,8 @@ with snapshots in m (excluding rows whose event appears in training), and
 compare a ladder of models against the market price.
 
 t_res uses closedTime, falling back to endDate; it does not verify when the
-outcome became available. Training does not separately require snapshots to
-precede the test month, and scheduled test snapshots can follow the proxy.
+outcome became available. Snapshots must precede the closure proxy, and both
+the snapshot and closure proxy must precede each training cutoff.
 See the README limitations before interpreting these as point-in-time results.
 
   price      : the market price itself
@@ -17,12 +17,15 @@ See the README limitations before interpreting these as point-in-time results.
   gbm_full   : + text features (TF-IDF/SVD fit on burn-in training data only)
 
 Saves per-row out-of-sample predictions to results/models/predictions_{anchor}.parquet
-and pooled and per-horizon metrics to results/models/model_metrics.json (per-fold
-train/test sizes are printed only).
+and pooled, per-horizon and fold timing diagnostics to
+results/models/model_metrics.json.
 """
 import json
 from pathlib import Path
-import warnings
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import write_json
 
 import lightgbm as lgb
 import numpy as np
@@ -32,7 +35,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
-warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 42
 BURN_IN_MONTHS = 6
@@ -57,12 +59,17 @@ def es_split(ttr, gtr, frac=0.15):
     assigned to the validation set in order of their last training snapshot
     (most recent first) until ~frac of rows accrue. Prevents rows of the same
     market/event from straddling the fit/validation boundary."""
-    ev = pd.DataFrame({"t": ttr, "g": gtr})
+    if not 0 < frac < 1:
+        raise ValueError("Early-stopping fraction must be between zero and one.")
+    ev = pd.DataFrame({"t": np.asarray(ttr), "g": np.asarray(gtr)})
+    if ev.isna().any().any() or ev["g"].nunique() < 2:
+        raise ValueError("Early stopping needs at least two nonmissing event groups and times.")
     last = ev.groupby("g")["t"].max().sort_values(ascending=False)
     sizes = ev.groupby("g").size()
     target = int(len(ev) * frac)
     va_events, acc = [], 0
-    for g in last.index:
+    # Always retain at least one whole event for fitting.
+    for g in last.index[:-1]:
         va_events.append(g)
         acc += sizes[g]
         if acc >= target:
@@ -71,39 +78,111 @@ def es_split(ttr, gtr, frac=0.15):
     return ~va_mask, va_mask
 
 
-def fit_gbm(Xtr, ytr, ttr, gtr, Xte):
-    """LightGBM with early stopping on an event-grouped temporal tail."""
+class ConstantBinaryModel:
+    """Explicit binary probabilities when only one outcome is available for fitting."""
+    def __init__(self, outcome):
+        self.outcome = float(outcome)
+
+    def predict_proba(self, X):
+        return np.tile([1 - self.outcome, self.outcome], (len(X), 1))
+
+
+def fit_gbm_model(Xtr, ytr, ttr, gtr):
+    """Select tree count on held-out events, then refit all eligible training rows."""
+    outcomes = np.unique(np.asarray(ytr))
+    if not len(outcomes) or not np.isin(outcomes, [0, 1]).all():
+        raise ValueError("Training outcomes must be nonempty and binary.")
+    if len(outcomes) == 1:
+        return ConstantBinaryModel(outcomes[0])
     fit_mask, va_mask = es_split(ttr, gtr)
+    # A single-class tail split cannot learn the binary mapping correctly.
+    # Use the fixed training budget in this case, never test outcomes.
+    if len(np.unique(np.asarray(ytr)[fit_mask])) < 2:
+        model = lgb.LGBMClassifier(**LGB_PARAMS)
+        model.fit(Xtr, ytr)
+        return model
     m = lgb.LGBMClassifier(**LGB_PARAMS)
     m.fit(Xtr[fit_mask], ytr[fit_mask],
           eval_set=[(Xtr[va_mask], ytr[va_mask])],
           eval_metric="binary_logloss",
           callbacks=[lgb.early_stopping(60, verbose=False)])
-    return m.predict_proba(Xte)[:, 1]
+    params = {**LGB_PARAMS, "n_estimators": m.best_iteration_ or LGB_PARAMS["n_estimators"]}
+    fitted = lgb.LGBMClassifier(**params)
+    fitted.fit(Xtr, ytr)
+    return fitted
+
+
+def fit_gbm(Xtr, ytr, ttr, gtr, Xte):
+    return fit_gbm_model(Xtr, ytr, ttr, gtr).predict_proba(Xte)[:, 1]
+
+
+def eligible_snapshots(d):
+    """Reject forecast rows at or after the recorded closure proxy."""
+    snap = pd.to_datetime(d["snap_ts"], unit="s", utc=True, errors="coerce")
+    closure = pd.to_datetime(d["t_res"], utc=True, errors="coerce")
+    return d.loc[snap.notna() & closure.notna() & (snap < closure)].copy()
+
+
+def training_eligible(d, cutoff):
+    """Both features and the outcome proxy must predate the fit cutoff."""
+    cutoff = pd.Timestamp(cutoff)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.tz_localize("UTC")
+    snap = pd.to_datetime(d["snap_ts"], unit="s", utc=True, errors="coerce")
+    closure = pd.to_datetime(d["t_res"], utc=True, errors="coerce")
+    return (snap < cutoff) & (closure < cutoff) & (snap < closure)
+
+
+def add_text_features(d, burn):
+    """Fit text transforms on eligible burn-in rows; pad small vocabularies with zeros."""
+    if burn.empty:
+        raise ValueError("No eligible burn-in rows for text preprocessing.")
+    tfidf = TfidfVectorizer(ngram_range=(1, 2), min_df=20, max_features=5000,
+                            sublinear_tf=True)
+    txt_cols = [f"svd_{i}" for i in range(N_SVD)]
+    encoded = np.zeros((len(d), N_SVD))
+    try:
+        Xt_burn = tfidf.fit_transform(burn["question"].fillna(""))
+    except ValueError as exc:
+        # A small or text-free collection still supports the non-text models.
+        if not any(term in str(exc) for term in ("empty vocabulary", "no terms remain", "max_df corresponds")):
+            raise
+    else:
+        Xt_all = tfidf.transform(d["question"].fillna(""))
+        n_components = min(N_SVD, Xt_burn.shape[0], Xt_burn.shape[1])
+        if Xt_burn.shape[1] == 1:
+            encoded[:, 0] = Xt_all.toarray()[:, 0]
+        else:
+            svd = TruncatedSVD(n_components=n_components, random_state=SEED)
+            svd.fit(Xt_burn)
+            values = svd.transform(Xt_all)
+            encoded[:, :values.shape[1]] = values
+    d = d.copy()
+    d[txt_cols] = encoded
+    return d, txt_cols
 
 
 def run_anchor(df, anchor):
-    d = df[df["anchor"] == anchor].copy()
+    source = df[df["anchor"] == anchor].copy()
+    d = eligible_snapshots(source)
+    n_ineligible = len(source) - len(d)
     d = d.sort_values("snap_ts").reset_index(drop=True)
     d["t_res"] = pd.to_datetime(d["t_res"], utc=True)
+    d["snap_month"] = pd.to_datetime(d["snap_ts"], unit="s", utc=True).dt.strftime("%Y-%m")
+    if d.duplicated(["id", "h"]).any():
+        raise ValueError(f"Duplicate market/horizon rows for {anchor}.")
     cat_dum = pd.get_dummies(d["cat"], prefix="cat")
     d = pd.concat([d, cat_dum], axis=1)
     cat_cols = list(cat_dum.columns)
 
     months = sorted(d["snap_month"].unique())
+    if len(months) <= BURN_IN_MONTHS:
+        raise ValueError(f"{anchor}: need more than {BURN_IN_MONTHS} months for walk-forward evaluation.")
     burn_end = months[BURN_IN_MONTHS - 1]
 
-    # Fit text once on rows whose closure-time proxy precedes the burn-in cutoff.
-    # As below, there is no separate training snapshot cutoff.
-    burn_train = d[d["t_res"] < pd.Timestamp(months[BURN_IN_MONTHS] + "-01", tz="UTC")]
-    tfidf = TfidfVectorizer(ngram_range=(1, 2), min_df=20, max_features=5000,
-                            sublinear_tf=True)
-    svd = TruncatedSVD(n_components=N_SVD, random_state=SEED)
-    Xt_burn = tfidf.fit_transform(burn_train["question"].fillna(""))
-    svd.fit(Xt_burn)
-    Xt_all = svd.transform(tfidf.transform(d["question"].fillna("")))
-    txt_cols = [f"svd_{i}" for i in range(N_SVD)]
-    d[txt_cols] = Xt_all
+    burn_cutoff = pd.Timestamp(months[BURN_IN_MONTHS] + "-01", tz="UTC")
+    burn_train = d[training_eligible(d, burn_cutoff)]
+    d, txt_cols = add_text_features(d, burn_train)
 
     FEATSETS = {
         "gbm_price": PRICE_FEATS,
@@ -113,31 +192,39 @@ def run_anchor(df, anchor):
     }
 
     preds = []
+    folds = []
     n_excluded = 0
     test_months = [m for m in months if m > burn_end]
     for m in test_months:
         m_start = pd.Timestamp(m + "-01", tz="UTC")
-        # Archived specification: proxy cutoff only, not a snapshot-time cutoff.
-        train = d[d["t_res"] < m_start]
+        train = d[training_eligible(d, m_start)]
         test = d[d["snap_month"] == m]
         if len(train) < 500 or len(test) == 0:
+            folds.append({"month": m, "n_train": len(train), "n_test_candidates": len(test),
+                          "status": "insufficient_rows"})
             continue
         train_events = set(train["event_id"])
         keep = ~test["event_id"].isin(train_events)
-        n_excluded += int((~keep).sum())
+        excluded = int((~keep).sum())
+        n_excluded += excluded
         test = test[keep]
         if len(test) == 0:
+            folds.append({"month": m, "n_train": len(train), "n_excluded_event_overlap": excluded,
+                          "status": "all_events_seen"})
             continue
 
         out = test[["id", "event_id", "h", "snap_month", "y", "p", "cat",
-                    "active_frac", "event_n_markets", "t_res"]].copy()
+                    "active_frac", "event_n_markets", "t_res", "snap_ts"]].copy()
         # price-only baselines
         iso = IsotonicRegression(y_min=0.001, y_max=0.999, out_of_bounds="clip")
         iso.fit(train["p"], train["y"])
         out["pred_iso"] = iso.predict(test["p"])
-        lr = LogisticRegression(C=1e6, max_iter=1000)
-        lr.fit(train[["logit_p"]], train["y"])
-        out["pred_logit"] = lr.predict_proba(test[["logit_p"]])[:, 1]
+        if train["y"].nunique() == 1:
+            out["pred_logit"] = float(train["y"].iloc[0])
+        else:
+            lr = LogisticRegression(C=1e6, max_iter=1000)
+            lr.fit(train[["logit_p"]], train["y"])
+            out["pred_logit"] = lr.predict_proba(test[["logit_p"]])[:, 1]
         ttr = train["snap_ts"].values
         gtr = train["event_id"].values
         for name, cols in FEATSETS.items():
@@ -145,9 +232,18 @@ def run_anchor(df, anchor):
                                           train["y"].reset_index(drop=True),
                                           ttr, gtr, test[cols])
         preds.append(out)
+        folds.append({"month": m, "status": "evaluated", "n_train": len(train),
+                      "n_train_events": int(train["event_id"].nunique()), "n_test": len(test),
+                      "n_excluded_event_overlap": excluded,
+                      "max_train_snapshot": pd.to_datetime(train["snap_ts"].max(), unit="s", utc=True).isoformat(),
+                      "max_train_closure_proxy": train["t_res"].max().isoformat(),
+                      "min_test_snapshot": pd.to_datetime(test["snap_ts"].min(), unit="s", utc=True).isoformat()})
         print(f"[{anchor}] {m}: train={len(train)}, test={len(test)}", flush=True)
 
+    if not preds:
+        raise ValueError(f"{anchor}: no evaluable folds after minimum training size and event exclusions.")
     P = pd.concat(preds, ignore_index=True)
+    (ROOT / "results/models").mkdir(parents=True, exist_ok=True)
     P.to_parquet(f"{ROOT}/results/models/predictions_{anchor}.parquet", index=False)
 
     # ---- metrics ----
@@ -178,6 +274,12 @@ def run_anchor(df, anchor):
            "n_months": int(P["snap_month"].nunique()),
            "brier_price": brier(P["p"]), "logloss_price": logloss(P["p"]),
            "base_rate": float(P["y"].mean()), "models": {}}
+    res["timing"] = {"snapshot_before_closure_proxy": True,
+                     "training_snapshot_before_month": True,
+                     "n_ineligible_input_rows": n_ineligible,
+                     "burn_in_cutoff": burn_cutoff.isoformat(), "n_burn_in": len(burn_train),
+                     "gbm_refit_all_training_rows": True}
+    res["folds"] = folds
     lp = (P["p"] - P["y"]) ** 2
     for mm in models:
         pr = P[f"pred_{mm}"]
@@ -215,8 +317,7 @@ def main():
     results = {}
     for anchor in ["sched", "res"]:
         results[anchor] = run_anchor(df, anchor)
-    with open(f"{ROOT}/results/models/model_metrics.json", "w") as f:
-        json.dump(results, f, indent=2, default=float)
+    write_json(ROOT / "results/models/model_metrics.json", results)
     for anchor in results:
         r = results[anchor]
         print(f"\n=== {anchor}: n={r['n']}, brier_price={r['brier_price']:.5f} ===")

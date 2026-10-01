@@ -5,32 +5,30 @@ The interpretation model is trained on pre-2025 data and examined on 2025 data.
 """
 import json
 from pathlib import Path
-import warnings
+import sys
 
-import lightgbm as lgb
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import write_json
+
 import numpy as np
 import pandas as pd
-from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
 
-warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 42
-RNG = np.random.default_rng(SEED)
 
 from importlib.machinery import SourceFileLoader
 m09 = SourceFileLoader("m09", f"{ROOT}/code/09_model.py").load_module()
+m05 = SourceFileLoader("m05", f"{ROOT}/code/05_analysis.py").load_module()
 
 
 def cluster_mean_se(vals, clusters):
-    g = pd.DataFrame({"v": vals, "c": clusters}).groupby("c")["v"].agg(["sum", "size"])
-    n = g["size"].sum()
-    mean = g["sum"].sum() / n
-    se = np.sqrt(((g["sum"] - mean * g["size"]) ** 2).sum()) / n
-    return float(mean), float(se), int(n)
+    frame = pd.DataFrame({"value": np.asarray(vals), "event_id": np.asarray(clusters)})
+    mean, se, n, _ = m05.cluster_mean_se(frame, "value")
+    return mean, se, n
 
 
 def main():
+    rng = np.random.default_rng(SEED)
     P = pd.read_parquet(f"{ROOT}/results/models/predictions_sched.parquet")
     out = {}
 
@@ -71,8 +69,8 @@ def main():
     P["dloss"] = (P["p"] - P["y"]) ** 2 - (P["pred_gbm_full"] - P["y"]) ** 2
     where = {}
     for key, grp in [("category", P["cat"]),
-                     ("p_bucket", pd.cut(P["p"], [0, .1, .9, 1], labels=["longshot", "mid", "favorite"])),
-                     ("activity_tercile", pd.qcut(P["active_frac"], 3, labels=["low", "mid", "high"]))]:
+                     ("p_bucket", pd.cut(P["p"], [0, .1, .9, 1.000001], right=False, labels=["longshot", "mid", "favorite"])),
+                     ("activity_tercile", m05.quantile_groups(P["active_frac"]))]:
         where[key] = {}
         for g, s in P.groupby(grp, observed=True):
             mean, se, n = cluster_mean_se(P.loc[s.index, "dloss"].values, s["event_id"].values)
@@ -85,30 +83,30 @@ def main():
     df = pd.read_parquet(f"{ROOT}/data/processed/ml_dataset.parquet")
     d = df[df["anchor"] == "sched"].copy()
     d["t_res"] = pd.to_datetime(d["t_res"], utc=True)
+    d = m09.eligible_snapshots(d)
     cat_dum = pd.get_dummies(d["cat"], prefix="cat")
     d = pd.concat([d, cat_dum], axis=1)
     cat_cols = list(cat_dum.columns)
     months = sorted(d["snap_month"].unique())
-    burn = d[d["t_res"] < pd.Timestamp(months[m09.BURN_IN_MONTHS] + "-01", tz="UTC")]
-    tfidf = TfidfVectorizer(ngram_range=(1, 2), min_df=20, max_features=5000, sublinear_tf=True)
-    svd = TruncatedSVD(n_components=m09.N_SVD, random_state=SEED)
-    svd.fit(tfidf.fit_transform(burn["question"].fillna("")))
-    txt_cols = [f"svd_{i}" for i in range(m09.N_SVD)]
-    d[txt_cols] = svd.transform(tfidf.transform(d["question"].fillna("")))
+    cut = pd.Timestamp("2025-01-01", tz="UTC")
+    if len(months) <= m09.BURN_IN_MONTHS:
+        raise ValueError("interpretation requires more months than the model burn-in")
+    burn_cut = min(pd.Timestamp(months[m09.BURN_IN_MONTHS] + "-01", tz="UTC"), cut)
+    burn = d[m09.training_eligible(d, burn_cut)]
+    d, txt_cols = m09.add_text_features(d, burn)
 
     FULL_ALL = m09.PRICE_FEATS + m09.PATH_FEATS + m09.STRUCT_FEATS + cat_cols + txt_cols
     d[FULL_ALL] = d[FULL_ALL].astype(np.float64)
 
     cut = pd.Timestamp("2025-01-01", tz="UTC")
-    train = d[d["t_res"] < cut]
+    train = d[m09.training_eligible(d, cut)]
     test = d[(pd.to_datetime(d["snap_month"] + "-01", utc=True) >= cut)
              & ~d["event_id"].isin(set(train["event_id"]))]
     FULL = m09.PRICE_FEATS + m09.PATH_FEATS + m09.STRUCT_FEATS + cat_cols + txt_cols
-    model = lgb.LGBMClassifier(**m09.LGB_PARAMS)
-    fit_mask, va_mask = m09.es_split(train["snap_ts"].values, train["event_id"].values)
-    model.fit(train[fit_mask][FULL], train[fit_mask]["y"],
-              eval_set=[(train[va_mask][FULL], train[va_mask]["y"])],
-              callbacks=[lgb.early_stopping(60, verbose=False)])
+    if train.empty or test.empty:
+        raise ValueError("interpretation requires eligible pre-2025 training and 2025+ test events")
+    model = m09.fit_gbm_model(train[FULL].reset_index(drop=True), train["y"].reset_index(drop=True),
+                              train["snap_ts"].values, train["event_id"].values)
 
     base_pred = model.predict_proba(test[FULL])[:, 1]
     base_brier = float(np.mean((base_pred - test["y"]) ** 2))
@@ -127,28 +125,28 @@ def main():
         deltas = []
         for _ in range(5):
             Xp = Xt.copy()
-            perm = RNG.permutation(len(Xp))
+            perm = rng.permutation(len(Xp))
             Xp[cols] = Xp[cols].values[perm]
             pb = model.predict_proba(Xp)[:, 1]
             deltas.append(float(np.mean((pb - yte) ** 2)) - base_brier)
-        gpi[gname] = {"mean_dbrier": float(np.mean(deltas)), "sd": float(np.std(deltas))}
+        gpi[gname] = {"mean_dbrier": float(np.mean(deltas)), "sd": float(np.std(deltas, ddof=1)), "n_repeats": len(deltas)}
     out["group_permutation_importance"] = gpi
 
     # individual permutation importance for top non-price features
     ind = {}
     for col in m09.PATH_FEATS + m09.STRUCT_FEATS:
         Xp = Xt.copy()
-        Xp[col] = Xp[col].values[RNG.permutation(len(Xp))]
+        Xp[col] = Xp[col].values[rng.permutation(len(Xp))]
         pb = model.predict_proba(Xp)[:, 1]
         ind[col] = float(np.mean((pb - yte) ** 2)) - base_brier
     out["indiv_permutation_importance"] = dict(
         sorted(ind.items(), key=lambda kv: -kv[1])[:12])
 
     # learned price-correction curve from the price-only model, per horizon
-    price_model = lgb.LGBMClassifier(**m09.LGB_PARAMS)
-    price_model.fit(train[fit_mask][m09.PRICE_FEATS], train[fit_mask]["y"],
-                    eval_set=[(train[va_mask][m09.PRICE_FEATS], train[va_mask]["y"])],
-                    callbacks=[lgb.early_stopping(60, verbose=False)])
+    price_model = m09.fit_gbm_model(train[m09.PRICE_FEATS].reset_index(drop=True),
+                                    train["y"].reset_index(drop=True), train["snap_ts"].values,
+                                    train["event_id"].values)
+
     grid = np.linspace(0.01, 0.99, 99)
     curves = {}
     for h in [1, 7, 30, 90]:
@@ -170,8 +168,7 @@ def main():
         pdps[feat] = {"grid": gridf.tolist(), "pdp": vals}
     out["pdps"] = pdps
 
-    with open(f"{ROOT}/results/models/interpretation.json", "w") as f:
-        json.dump(out, f, indent=2, default=float)
+    write_json(ROOT / "results/models/interpretation.json", out)
     print("backtest theta=0.05:", json.dumps(bt.get("theta0.05_net_1c", bt), indent=2)[:400])
     print("\ngroup importance:", json.dumps(gpi, indent=2))
     print("\nDONE -> results/models/interpretation.json")

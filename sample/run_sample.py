@@ -1,12 +1,12 @@
 """Run the early pipeline stages on the synthetic sample in this folder.
 
 Copies code/ and the two sample inputs into a separate project root, then runs
-00_setup, 03_build_sample, 04_build_panel, 05_analysis, 07_tables and
+00_setup, 03_build_sample, 04_build_panel, 05_analysis, 06_figures, 07_tables and
 08_features there. Every script locates the project from its own path, so all
 outputs land under that root's data/processed/ and results/. This folder's
-archived results/ are never written. Stages 06 and 09-12 need a larger sample:
-06 plots 30- and 90-day calibration bins and 09 fits text features on many
-months of markets.
+archived results/ are never written. Stage 06 marks unsupported calibration
+horizons as unavailable. Stages 09-12 need a larger sample: 09 fits text
+features on many months of markets.
 
 Usage:
   python sample/run_sample.py                 # runs in a new temporary directory
@@ -23,7 +23,8 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 INPUTS = ("markets_meta.jsonl", "price_histories.jsonl")
-STAGES = ("03_build_sample", "04_build_panel", "05_analysis", "07_tables", "08_features")
+STAGES = ("03_build_sample", "04_build_panel", "05_analysis", "06_figures",
+          "07_tables", "08_features")
 
 
 def run(workdir, stages=STAGES, echo=False):
@@ -31,8 +32,16 @@ def run(workdir, stages=STAGES, echo=False):
     workdir = Path(workdir).resolve()
     if workdir == ROOT:
         raise ValueError("workdir must be separate from the project root")
+    if workdir.exists() and not workdir.is_dir():
+        raise ValueError(f"workdir is not a directory: {workdir}")
     if workdir.exists() and any(workdir.iterdir()):
         raise ValueError(f"workdir is not empty: {workdir}")
+    stages = tuple(stages)
+    if any(stage not in STAGES for stage in stages):
+        raise ValueError(f"sample stages must be chosen from {', '.join(STAGES)}")
+    for name in INPUTS:
+        if not (HERE / name).is_file():
+            raise ValueError(f"sample input is missing: {name}; run sample/make_sample.py")
     (workdir / "code").mkdir(parents=True, exist_ok=True)
     for script in sorted((ROOT / "code").glob("*.py")):
         shutil.copy2(script, workdir / "code" / script.name)

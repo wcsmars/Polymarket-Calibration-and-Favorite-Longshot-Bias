@@ -1,7 +1,7 @@
 """Smoke test: run the early pipeline stages on the bundled synthetic sample.
 
 sample/run_sample.py copies code/ and the sample inputs into a temporary project
-root and runs 03, 04, 05, 07 and 08 there. These checks cover the
+root and runs 03, 04, 05, 06, 07 and 08 there. These checks cover the
 sample-construction counts, the no-look-ahead timing rules of panel prices and
 feature snapshots, and the reconciliation of the analysis outputs. They also
 confirm that the archived results/, figures/ and any local data/ in this
@@ -158,11 +158,24 @@ class SamplePipelineTests(unittest.TestCase):
         for row in self.features.itertuples():
             anchor = markets.at[row.id, "t_end" if row.anchor == "sched" else "t_res"]
             self.assertAlmostEqual(row.snap_ts, anchor.timestamp() - row.h * DAY)
+            self.assertGreaterEqual(row.snap_ts, markets.at[row.id, "t_created"].timestamp())
+            self.assertLess(row.snap_ts, markets.at[row.id, "t_res"].timestamp())
             history = self.history(row.id)
             self.assertEqual(row.n_obs_pre, int((history[:, 0] <= row.snap_ts).sum()))
             last = history[row.n_obs_pre - 1]
             self.assertLessEqual(row.snap_ts - last[0], STALE_TOL)
             self.assertAlmostEqual(row.p, clip(last[1]))
+
+    def test_all_calibration_figures_are_generated_for_the_small_sample(self):
+        figures = self.work / "figures" / "calibration"
+        expected = {
+            "fig1_calibration_by_horizon.png", "fig2_miscalibration_h7.png",
+            "fig3_slope_by_horizon.png", "fig4_decile_returns.png",
+            "fig5_sample_composition.png", "fig6_moderators.png",
+        }
+        self.assertEqual({path.name for path in figures.glob("*.png")}, expected)
+        for name in expected:
+            self.assertGreater((figures / name).stat().st_size, 1000)
 
 
 class SampleFilesTests(unittest.TestCase):

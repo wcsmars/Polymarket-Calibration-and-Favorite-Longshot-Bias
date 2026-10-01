@@ -429,9 +429,10 @@ def check_categories(markets):
 def write(out_dir=HERE, seed=SEED):
     out_dir = Path(out_dir)
     rows, histories = build(seed)
-    with open(out_dir / "markets_meta.jsonl", "w", newline="\n") as f:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "markets_meta.jsonl", "w", encoding="utf-8", newline="\n") as f:
         f.writelines(json.dumps(r) + "\n" for r in rows)
-    with open(out_dir / "price_histories.jsonl", "w", newline="\n") as f:
+    with open(out_dir / "price_histories.jsonl", "w", encoding="utf-8", newline="\n") as f:
         f.writelines(json.dumps(h) + "\n" for h in histories)
     return len(rows), len(histories)
 

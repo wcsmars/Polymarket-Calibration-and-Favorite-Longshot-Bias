@@ -1,291 +1,907 @@
 {
   "sched": {
-    "n": 57957,
-    "n_events": 6167,
-    "n_excluded_event_overlap": 2545,
-    "n_months": 26,
-    "brier_price": 0.07740241630001556,
-    "logloss_price": 0.249893818324655,
-    "base_rate": 0.18003002225788084,
+    "n": 55826,
+    "n_events": 6021,
+    "n_excluded_event_overlap": 2246,
+    "n_months": 25,
+    "brier_price": 0.07853047620284455,
+    "logloss_price": 0.2532927902809705,
+    "base_rate": 0.17957582488446244,
     "models": {
       "iso": {
-        "brier": 0.07684629732270482,
-        "logloss": 0.2489215697002773,
-        "delta_brier_vs_price": 0.0005561189773107406,
+        "brier": 0.07774211641438047,
+        "logloss": 0.25193863576636744,
+        "delta_brier_vs_price": 0.0007883597884640742,
         "dm_event": {
-          "mean": 0.0005561189773107149,
-          "se": 0.0002921877430672913,
-          "t": 1.9032933122818905
+          "mean": 0.0007883597884640712,
+          "se": 0.0003259043999378216,
+          "t": 2.418990932968319
         },
         "dm_monthly": {
-          "mean": -0.0008372712009166353,
-          "t": -1.3468926050628844,
-          "n_months": 26
+          "mean": -0.00020654694594816536,
+          "t": -0.3230803711209235,
+          "n_months": 25
         }
       },
       "logit": {
-        "brier": 0.07682400671185981,
-        "logloss": 0.24838995881858952,
-        "delta_brier_vs_price": 0.0005784095881557483,
+        "brier": 0.07783763857843694,
+        "logloss": 0.2516168365534639,
+        "delta_brier_vs_price": 0.0006928376244076107,
         "dm_event": {
-          "mean": 0.0005784095881557277,
-          "se": 0.00014279637345940058,
-          "t": 4.050590180570512
+          "mean": 0.0006928376244076354,
+          "se": 0.0001552266499886886,
+          "t": 4.4633935246178575
         },
         "dm_monthly": {
-          "mean": -0.0001093815880499405,
-          "t": -0.20348151546172105,
-          "n_months": 26
+          "mean": 0.000679273856989286,
+          "t": 1.5263656352248,
+          "n_months": 25
         }
       },
       "gbm_price": {
-        "brier": 0.07807017470633694,
-        "logloss": 0.25391352199347667,
-        "delta_brier_vs_price": -0.0006677584063213837,
+        "brier": 0.0785824611792278,
+        "logloss": 0.2557077189751122,
+        "delta_brier_vs_price": -5.198497638325694e-05,
         "dm_event": {
-          "mean": -0.0006677584063213983,
-          "se": 0.0003399677598206404,
-          "t": -1.9641815643744955
+          "mean": -5.1984976383240517e-05,
+          "se": 0.00031132181556428503,
+          "t": -0.16698147635113642
         },
         "dm_monthly": {
-          "mean": -0.002958811576301028,
-          "t": -3.305828710297634,
-          "n_months": 26
+          "mean": -0.0014672997244800882,
+          "t": -1.805274302310831,
+          "n_months": 25
         }
       },
       "gbm_path": {
-        "brier": 0.07854172875556512,
-        "logloss": 0.25613332438708286,
-        "delta_brier_vs_price": -0.0011393124555495598,
+        "brier": 0.07939468374435305,
+        "logloss": 0.25909438744719127,
+        "delta_brier_vs_price": -0.0008642075415084965,
         "dm_event": {
-          "mean": -0.0011393124555495865,
-          "se": 0.00041644182209258946,
-          "t": -2.7358262189532874
+          "mean": -0.0008642075415084906,
+          "se": 0.00045395335511428536,
+          "t": -1.903736434090065
         },
         "dm_monthly": {
-          "mean": -0.002558097961559016,
-          "t": -3.380701818600153,
-          "n_months": 26
+          "mean": -0.0028060710829968644,
+          "t": -2.8529166047183048,
+          "n_months": 25
         }
       },
       "gbm_notext": {
-        "brier": 0.07852133119673103,
-        "logloss": 0.25580698356771886,
-        "delta_brier_vs_price": -0.0011189148967154783,
+        "brier": 0.07933888411410618,
+        "logloss": 0.25781267723331036,
+        "delta_brier_vs_price": -0.0008084079112616327,
         "dm_event": {
-          "mean": -0.0011189148967155095,
-          "se": 0.0004191142247191883,
-          "t": -2.669713483156522
+          "mean": -0.0008084079112616247,
+          "se": 0.0005732364066913932,
+          "t": -1.410252213266765
         },
         "dm_monthly": {
-          "mean": -0.003480127631276338,
-          "t": -3.7313616588159135,
-          "n_months": 26
+          "mean": -0.002826149748296362,
+          "t": -2.7122516918845094,
+          "n_months": 25
         }
       },
       "gbm_full": {
-        "brier": 0.07877915433030273,
-        "logloss": 0.2565011731454844,
-        "delta_brier_vs_price": -0.001376738030287178,
+        "brier": 0.07982241408456199,
+        "logloss": 0.2596144871471526,
+        "delta_brier_vs_price": -0.001291937881717442,
         "dm_event": {
-          "mean": -0.001376738030287199,
-          "se": 0.000514634541289613,
-          "t": -2.675176110094082
+          "mean": -0.0012919378817174414,
+          "se": 0.0005535927188285232,
+          "t": -2.3337335152300343
         },
         "dm_monthly": {
-          "mean": -0.004149985787229507,
-          "t": -3.630689047345519,
-          "n_months": 26
+          "mean": -0.0040978018837892136,
+          "t": -3.527923184166507,
+          "n_months": 25
         }
       }
     },
+    "timing": {
+      "snapshot_before_closure_proxy": true,
+      "training_snapshot_before_month": true,
+      "n_ineligible_input_rows": 0,
+      "burn_in_cutoff": "2023-06-01T00:00:00+00:00",
+      "n_burn_in": 484,
+      "gbm_refit_all_training_rows": true
+    },
+    "folds": [
+      {
+        "month": "2023-06",
+        "n_train": 484,
+        "n_test_candidates": 170,
+        "status": "insufficient_rows"
+      },
+      {
+        "month": "2023-07",
+        "status": "evaluated",
+        "n_train": 626,
+        "n_train_events": 128,
+        "n_test": 176,
+        "n_excluded_event_overlap": 14,
+        "max_train_snapshot": "2023-06-29T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-06-30T20:31:34+00:00",
+        "min_test_snapshot": "2023-07-01T00:00:00+00:00"
+      },
+      {
+        "month": "2023-08",
+        "status": "evaluated",
+        "n_train": 860,
+        "n_train_events": 187,
+        "n_test": 200,
+        "n_excluded_event_overlap": 10,
+        "max_train_snapshot": "2023-07-30T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-07-31T23:33:27+00:00",
+        "min_test_snapshot": "2023-08-01T00:00:00+00:00"
+      },
+      {
+        "month": "2023-09",
+        "status": "evaluated",
+        "n_train": 1045,
+        "n_train_events": 234,
+        "n_test": 160,
+        "n_excluded_event_overlap": 16,
+        "max_train_snapshot": "2023-08-30T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-08-31T18:17:56+00:00",
+        "min_test_snapshot": "2023-09-01T00:00:00+00:00"
+      },
+      {
+        "month": "2023-10",
+        "status": "evaluated",
+        "n_train": 1201,
+        "n_train_events": 274,
+        "n_test": 235,
+        "n_excluded_event_overlap": 13,
+        "max_train_snapshot": "2023-09-29T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-09-30T20:20:39+00:00",
+        "min_test_snapshot": "2023-10-01T00:00:00+00:00"
+      },
+      {
+        "month": "2023-11",
+        "status": "evaluated",
+        "n_train": 1420,
+        "n_train_events": 332,
+        "n_test": 250,
+        "n_excluded_event_overlap": 20,
+        "max_train_snapshot": "2023-10-30T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-10-31T18:16:01+00:00",
+        "min_test_snapshot": "2023-11-01T00:00:00+00:00"
+      },
+      {
+        "month": "2023-12",
+        "status": "evaluated",
+        "n_train": 1644,
+        "n_train_events": 384,
+        "n_test": 571,
+        "n_excluded_event_overlap": 27,
+        "max_train_snapshot": "2023-11-26T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-11-28T02:43:51+00:00",
+        "min_test_snapshot": "2023-12-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-01",
+        "status": "evaluated",
+        "n_train": 1816,
+        "n_train_events": 432,
+        "n_test": 397,
+        "n_excluded_event_overlap": 14,
+        "max_train_snapshot": "2023-12-28T00:00:00+00:00",
+        "max_train_closure_proxy": "2023-12-30T07:15:20+00:00",
+        "min_test_snapshot": "2024-01-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-02",
+        "status": "evaluated",
+        "n_train": 2523,
+        "n_train_events": 557,
+        "n_test": 370,
+        "n_excluded_event_overlap": 17,
+        "max_train_snapshot": "2024-01-30T00:00:00+00:00",
+        "max_train_closure_proxy": "2024-01-31T21:15:18+00:00",
+        "min_test_snapshot": "2024-02-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-03",
+        "status": "evaluated",
+        "n_train": 2818,
+        "n_train_events": 630,
+        "n_test": 763,
+        "n_excluded_event_overlap": 25,
+        "max_train_snapshot": "2024-02-29T00:00:00+00:00",
+        "max_train_closure_proxy": "2024-02-29T23:49:14+00:00",
+        "min_test_snapshot": "2024-03-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-04",
+        "status": "evaluated",
+        "n_train": 3449,
+        "n_train_events": 759,
+        "n_test": 827,
+        "n_excluded_event_overlap": 33,
+        "max_train_snapshot": "2024-03-31T23:00:00+00:00",
+        "max_train_closure_proxy": "2024-03-31T23:50:10+00:00",
+        "min_test_snapshot": "2024-04-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-05",
+        "status": "evaluated",
+        "n_train": 4283,
+        "n_train_events": 912,
+        "n_test": 1114,
+        "n_excluded_event_overlap": 75,
+        "max_train_snapshot": "2024-04-29T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-04-30T23:26:07+00:00",
+        "min_test_snapshot": "2024-05-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-06",
+        "status": "evaluated",
+        "n_train": 5297,
+        "n_train_events": 1055,
+        "n_test": 1358,
+        "n_excluded_event_overlap": 191,
+        "max_train_snapshot": "2024-05-30T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-05-31T23:19:06+00:00",
+        "min_test_snapshot": "2024-06-01T07:00:00+00:00"
+      },
+      {
+        "month": "2024-07",
+        "status": "evaluated",
+        "n_train": 6572,
+        "n_train_events": 1242,
+        "n_test": 1315,
+        "n_excluded_event_overlap": 38,
+        "max_train_snapshot": "2024-06-29T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-06-30T23:54:07+00:00",
+        "min_test_snapshot": "2024-07-01T07:00:00+00:00"
+      },
+      {
+        "month": "2024-08",
+        "status": "evaluated",
+        "n_train": 8204,
+        "n_train_events": 1436,
+        "n_test": 2001,
+        "n_excluded_event_overlap": 33,
+        "max_train_snapshot": "2024-07-30T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-07-31T23:56:50+00:00",
+        "min_test_snapshot": "2024-08-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-09",
+        "status": "evaluated",
+        "n_train": 9806,
+        "n_train_events": 1666,
+        "n_test": 2238,
+        "n_excluded_event_overlap": 53,
+        "max_train_snapshot": "2024-08-30T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-08-31T21:33:19+00:00",
+        "min_test_snapshot": "2024-09-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-10",
+        "status": "evaluated",
+        "n_train": 11495,
+        "n_train_events": 1908,
+        "n_test": 3849,
+        "n_excluded_event_overlap": 68,
+        "max_train_snapshot": "2024-09-29T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-09-30T23:56:10+00:00",
+        "min_test_snapshot": "2024-10-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-11",
+        "status": "evaluated",
+        "n_train": 13379,
+        "n_train_events": 2149,
+        "n_test": 3175,
+        "n_excluded_event_overlap": 63,
+        "max_train_snapshot": "2024-10-31T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-10-31T23:45:08+00:00",
+        "min_test_snapshot": "2024-11-01T00:00:00+00:00"
+      },
+      {
+        "month": "2024-12",
+        "status": "evaluated",
+        "n_train": 18487,
+        "n_train_events": 2594,
+        "n_test": 3181,
+        "n_excluded_event_overlap": 211,
+        "max_train_snapshot": "2024-11-29T17:30:00+00:00",
+        "max_train_closure_proxy": "2024-11-30T22:51:11+00:00",
+        "min_test_snapshot": "2024-12-01T00:00:00+00:00"
+      },
+      {
+        "month": "2025-01",
+        "status": "evaluated",
+        "n_train": 20982,
+        "n_train_events": 2833,
+        "n_test": 3389,
+        "n_excluded_event_overlap": 175,
+        "max_train_snapshot": "2024-12-30T12:00:00+00:00",
+        "max_train_closure_proxy": "2024-12-31T23:56:27+00:00",
+        "min_test_snapshot": "2025-01-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-02",
+        "status": "evaluated",
+        "n_train": 25627,
+        "n_train_events": 3277,
+        "n_test": 4123,
+        "n_excluded_event_overlap": 99,
+        "max_train_snapshot": "2025-01-30T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-01-31T20:43:54+00:00",
+        "min_test_snapshot": "2025-02-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-03",
+        "status": "evaluated",
+        "n_train": 29069,
+        "n_train_events": 3599,
+        "n_test": 4221,
+        "n_excluded_event_overlap": 336,
+        "max_train_snapshot": "2025-02-28T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-02-28T22:19:56+00:00",
+        "min_test_snapshot": "2025-03-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-04",
+        "status": "evaluated",
+        "n_train": 32605,
+        "n_train_events": 4002,
+        "n_test": 5517,
+        "n_excluded_event_overlap": 283,
+        "max_train_snapshot": "2025-03-31T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-03-31T23:41:51+00:00",
+        "min_test_snapshot": "2025-04-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-05",
+        "status": "evaluated",
+        "n_train": 39146,
+        "n_train_events": 4506,
+        "n_test": 6205,
+        "n_excluded_event_overlap": 171,
+        "max_train_snapshot": "2025-04-29T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-04-30T20:33:34+00:00",
+        "min_test_snapshot": "2025-05-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-06",
+        "status": "evaluated",
+        "n_train": 45180,
+        "n_train_events": 4991,
+        "n_test": 5545,
+        "n_excluded_event_overlap": 143,
+        "max_train_snapshot": "2025-05-31T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-05-31T23:58:38+00:00",
+        "min_test_snapshot": "2025-06-01T12:00:00+00:00"
+      },
+      {
+        "month": "2025-07",
+        "status": "evaluated",
+        "n_train": 50732,
+        "n_train_events": 5448,
+        "n_test": 4646,
+        "n_excluded_event_overlap": 118,
+        "max_train_snapshot": "2025-06-29T12:00:00+00:00",
+        "max_train_closure_proxy": "2025-06-30T23:29:34+00:00",
+        "min_test_snapshot": "2025-07-01T00:00:00+00:00"
+      }
+    ],
     "by_horizon": {
       "1": {
-        "n": 16960,
-        "brier_price": 0.08593274771521227,
-        "brier_gbm_full": 0.08705530841468472,
-        "dm_t": -0.9478374321976798
+        "n": 16030,
+        "brier_price": 0.08805787917966314,
+        "brier_gbm_full": 0.08866847633977114,
+        "dm_t": -0.43446662246084633
       },
       "3": {
-        "n": 13960,
-        "brier_price": 0.08310315624999999,
-        "brier_gbm_full": 0.08558969697300924,
-        "dm_t": -4.318185743568044
+        "n": 13427,
+        "brier_price": 0.08459166505920906,
+        "brier_gbm_full": 0.08703233806892999,
+        "dm_t": -4.194685033291861
       },
       "7": {
-        "n": 9416,
-        "brier_price": 0.0732060694562447,
-        "brier_gbm_full": 0.07505645638573154,
-        "dm_t": -2.9786843811787573
+        "n": 9109,
+        "brier_price": 0.07424242455264027,
+        "brier_gbm_full": 0.07632921724664124,
+        "dm_t": -3.4648024622935405
       },
       "14": {
-        "n": 7322,
-        "brier_price": 0.06545690511472275,
-        "brier_gbm_full": 0.06659088638130717,
-        "dm_t": -1.6845380987604728
+        "n": 7115,
+        "brier_price": 0.0655862477512298,
+        "brier_gbm_full": 0.06729595842364353,
+        "dm_t": -2.4468076856286607
       },
       "30": {
-        "n": 4721,
-        "brier_price": 0.06749131788815928,
-        "brier_gbm_full": 0.06793972364649915,
-        "dm_t": -0.48819830535336206
+        "n": 4598,
+        "brier_price": 0.06803480991735537,
+        "brier_gbm_full": 0.06798592186848645,
+        "dm_t": 0.05403162048427154
       },
       "60": {
-        "n": 3128,
-        "brier_price": 0.06666380482736572,
-        "brier_gbm_full": 0.06710726271934232,
-        "dm_t": -0.31949948081482915
+        "n": 3117,
+        "brier_price": 0.06678947072505614,
+        "brier_gbm_full": 0.0665913729736312,
+        "dm_t": 0.15053501986207868
       },
       "90": {
-        "n": 2450,
-        "brier_price": 0.07050517408163266,
-        "brier_gbm_full": 0.06920335940077113,
-        "dm_t": 0.630802514235631
+        "n": 2430,
+        "brier_price": 0.0710843787037037,
+        "brier_gbm_full": 0.07076915527272246,
+        "dm_t": 0.1583270170566846
       }
     }
   },
   "res": {
-    "n": 71717,
-    "n_events": 7100,
-    "n_excluded_event_overlap": 5105,
+    "n": 70673,
+    "n_events": 7039,
+    "n_excluded_event_overlap": 5047,
     "n_months": 27,
-    "brier_price": 0.07436809861678544,
-    "logloss_price": 0.2392218230504828,
-    "base_rate": 0.19211623464450547,
+    "brier_price": 0.07445318959149888,
+    "logloss_price": 0.2395265573868086,
+    "base_rate": 0.19263367905706563,
     "models": {
       "iso": {
-        "brier": 0.07416218925528895,
-        "logloss": 0.23885966246302992,
-        "delta_brier_vs_price": 0.00020590936149648964,
+        "brier": 0.07426774282686756,
+        "logloss": 0.23920463449851387,
+        "delta_brier_vs_price": 0.00018544676463132237,
         "dm_event": {
-          "mean": 0.0002059093614964823,
-          "se": 0.00013390689011540861,
-          "t": 1.5377055005834117
+          "mean": 0.00018544676463130784,
+          "se": 0.00013035891293736624,
+          "t": 1.4225860008545006
         },
         "dm_monthly": {
-          "mean": -3.5485709877546214e-05,
-          "t": -0.08128920645076458,
+          "mean": -0.0001845030049010112,
+          "t": -0.4303721533172648,
           "n_months": 27
         }
       },
       "logit": {
-        "brier": 0.07426371199112405,
-        "logloss": 0.23856901990931897,
-        "delta_brier_vs_price": 0.0001043866256613818,
+        "brier": 0.07435688757070971,
+        "logloss": 0.23889331146712467,
+        "delta_brier_vs_price": 9.63020207891685e-05,
         "dm_event": {
-          "mean": 0.0001043866256613488,
-          "se": 6.989833391367037e-05,
-          "t": 1.4934064922101582
+          "mean": 9.630202078917813e-05,
+          "se": 6.595602197834006e-05,
+          "t": 1.460094437181243
         },
         "dm_monthly": {
-          "mean": -0.00033542261466477886,
-          "t": -1.1595062288246354,
+          "mean": -0.0003489576053091931,
+          "t": -1.2186119992596576,
           "n_months": 27
         }
       },
       "gbm_price": {
-        "brier": 0.07487749598967884,
-        "logloss": 0.24195916246576746,
-        "delta_brier_vs_price": -0.0005093973728934054,
+        "brier": 0.07484445661367256,
+        "logloss": 0.24194648207244646,
+        "delta_brier_vs_price": -0.00039126702217368026,
         "dm_event": {
-          "mean": -0.0005093973728934308,
-          "se": 0.00017967996285566702,
-          "t": -2.83502603627884
+          "mean": -0.00039126702217369245,
+          "se": 0.00017077130886669127,
+          "t": -2.2911754015958627
         },
         "dm_monthly": {
-          "mean": -0.0013808652436940506,
-          "t": -2.5126499150835433,
+          "mean": -0.0017404365435149652,
+          "t": -2.8767630354099705,
           "n_months": 27
         }
       },
       "gbm_path": {
-        "brier": 0.07418108165436668,
-        "logloss": 0.24107410652828284,
-        "delta_brier_vs_price": 0.00018701696241875398,
+        "brier": 0.07428754064625259,
+        "logloss": 0.2420123854645353,
+        "delta_brier_vs_price": 0.00016564894524628837,
         "dm_event": {
-          "mean": 0.00018701696241874642,
-          "se": 0.000319196835035943,
-          "t": 0.585898548767526
+          "mean": 0.00016564894524627384,
+          "se": 0.00031635182061081393,
+          "t": 0.5236225444394089
         },
         "dm_monthly": {
-          "mean": 0.0004835450836190276,
-          "t": 0.4967372979005476,
+          "mean": 0.0003795967450696953,
+          "t": 0.29270592641954785,
           "n_months": 27
         }
       },
       "gbm_notext": {
-        "brier": 0.07322057876636644,
-        "logloss": 0.23908952836451375,
-        "delta_brier_vs_price": 0.0011475198504189987,
+        "brier": 0.07298690434358868,
+        "logloss": 0.2381214119325793,
+        "delta_brier_vs_price": 0.001466285247910204,
         "dm_event": {
-          "mean": 0.0011475198504189963,
-          "se": 0.0003565819580641435,
-          "t": 3.218109678484001
+          "mean": 0.0014662852479101947,
+          "se": 0.00036005059254056316,
+          "t": 4.072442257528026
         },
         "dm_monthly": {
-          "mean": 0.0023408547338953267,
-          "t": 1.2565757588304314,
+          "mean": 0.001923135450045796,
+          "t": 1.2796890944230772,
           "n_months": 27
         }
       },
       "gbm_full": {
-        "brier": 0.07380193417274784,
-        "logloss": 0.24065167906551616,
-        "delta_brier_vs_price": 0.0005661644440375924,
+        "brier": 0.07407036396209891,
+        "logloss": 0.24127456992876786,
+        "delta_brier_vs_price": 0.000382825629399966,
         "dm_event": {
-          "mean": 0.000566164444037588,
-          "se": 0.0003669705462773061,
-          "t": 1.5428062273143808
+          "mean": 0.0003828256293999642,
+          "se": 0.000381091146784604,
+          "t": 1.0045513589858872
         },
         "dm_monthly": {
-          "mean": 0.0027161632638657584,
-          "t": 0.8744893443524427,
+          "mean": 0.0012354382422595945,
+          "t": 0.4860513715553051,
           "n_months": 27
         }
       }
     },
+    "timing": {
+      "snapshot_before_closure_proxy": true,
+      "training_snapshot_before_month": true,
+      "n_ineligible_input_rows": 0,
+      "burn_in_cutoff": "2023-07-01T00:00:00+00:00",
+      "n_burn_in": 824,
+      "gbm_refit_all_training_rows": true
+    },
+    "folds": [
+      {
+        "month": "2023-07",
+        "status": "evaluated",
+        "n_train": 824,
+        "n_train_events": 153,
+        "n_test": 243,
+        "n_excluded_event_overlap": 13,
+        "max_train_snapshot": "2023-06-29T20:31:34+00:00",
+        "max_train_closure_proxy": "2023-06-30T20:31:34+00:00",
+        "min_test_snapshot": "2023-07-01T08:00:41+00:00"
+      },
+      {
+        "month": "2023-08",
+        "status": "evaluated",
+        "n_train": 1103,
+        "n_train_events": 215,
+        "n_test": 280,
+        "n_excluded_event_overlap": 11,
+        "max_train_snapshot": "2023-07-30T23:33:27+00:00",
+        "max_train_closure_proxy": "2023-07-31T23:33:27+00:00",
+        "min_test_snapshot": "2023-08-01T20:00:27+00:00"
+      },
+      {
+        "month": "2023-09",
+        "status": "evaluated",
+        "n_train": 1385,
+        "n_train_events": 277,
+        "n_test": 216,
+        "n_excluded_event_overlap": 18,
+        "max_train_snapshot": "2023-08-30T18:17:56+00:00",
+        "max_train_closure_proxy": "2023-08-31T18:17:56+00:00",
+        "min_test_snapshot": "2023-09-01T06:03:00+00:00"
+      },
+      {
+        "month": "2023-10",
+        "status": "evaluated",
+        "n_train": 1572,
+        "n_train_events": 325,
+        "n_test": 318,
+        "n_excluded_event_overlap": 12,
+        "max_train_snapshot": "2023-09-29T20:20:39+00:00",
+        "max_train_closure_proxy": "2023-09-30T20:20:39+00:00",
+        "min_test_snapshot": "2023-10-01T00:05:41+00:00"
+      },
+      {
+        "month": "2023-11",
+        "status": "evaluated",
+        "n_train": 1901,
+        "n_train_events": 395,
+        "n_test": 348,
+        "n_excluded_event_overlap": 27,
+        "max_train_snapshot": "2023-10-30T18:16:01+00:00",
+        "max_train_closure_proxy": "2023-10-31T18:16:01+00:00",
+        "min_test_snapshot": "2023-11-01T06:06:47+00:00"
+      },
+      {
+        "month": "2023-12",
+        "status": "evaluated",
+        "n_train": 2198,
+        "n_train_events": 456,
+        "n_test": 596,
+        "n_excluded_event_overlap": 29,
+        "max_train_snapshot": "2023-11-29T03:45:22+00:00",
+        "max_train_closure_proxy": "2023-11-30T03:45:22+00:00",
+        "min_test_snapshot": "2023-12-01T06:17:40+00:00"
+      },
+      {
+        "month": "2024-01",
+        "status": "evaluated",
+        "n_train": 2441,
+        "n_train_events": 510,
+        "n_test": 469,
+        "n_excluded_event_overlap": 16,
+        "max_train_snapshot": "2023-12-29T07:15:20+00:00",
+        "max_train_closure_proxy": "2023-12-30T07:15:20+00:00",
+        "min_test_snapshot": "2024-01-01T00:30:17+00:00"
+      },
+      {
+        "month": "2024-02",
+        "status": "evaluated",
+        "n_train": 3214,
+        "n_train_events": 638,
+        "n_test": 509,
+        "n_excluded_event_overlap": 20,
+        "max_train_snapshot": "2024-01-30T21:15:18+00:00",
+        "max_train_closure_proxy": "2024-01-31T21:15:18+00:00",
+        "min_test_snapshot": "2024-02-01T01:01:57+00:00"
+      },
+      {
+        "month": "2024-03",
+        "status": "evaluated",
+        "n_train": 3575,
+        "n_train_events": 725,
+        "n_test": 1103,
+        "n_excluded_event_overlap": 25,
+        "max_train_snapshot": "2024-02-28T23:49:14+00:00",
+        "max_train_closure_proxy": "2024-02-29T23:49:14+00:00",
+        "min_test_snapshot": "2024-03-01T01:46:14+00:00"
+      },
+      {
+        "month": "2024-04",
+        "status": "evaluated",
+        "n_train": 4572,
+        "n_train_events": 884,
+        "n_test": 1161,
+        "n_excluded_event_overlap": 105,
+        "max_train_snapshot": "2024-03-30T23:50:10+00:00",
+        "max_train_closure_proxy": "2024-03-31T23:50:10+00:00",
+        "min_test_snapshot": "2024-04-01T00:09:17+00:00"
+      },
+      {
+        "month": "2024-05",
+        "status": "evaluated",
+        "n_train": 5750,
+        "n_train_events": 1051,
+        "n_test": 1282,
+        "n_excluded_event_overlap": 187,
+        "max_train_snapshot": "2024-04-29T23:26:07+00:00",
+        "max_train_closure_proxy": "2024-04-30T23:26:07+00:00",
+        "min_test_snapshot": "2024-05-01T00:07:46+00:00"
+      },
+      {
+        "month": "2024-06",
+        "status": "evaluated",
+        "n_train": 7075,
+        "n_train_events": 1211,
+        "n_test": 1863,
+        "n_excluded_event_overlap": 256,
+        "max_train_snapshot": "2024-05-30T23:19:06+00:00",
+        "max_train_closure_proxy": "2024-05-31T23:19:06+00:00",
+        "min_test_snapshot": "2024-06-01T00:57:56+00:00"
+      },
+      {
+        "month": "2024-07",
+        "status": "evaluated",
+        "n_train": 8870,
+        "n_train_events": 1432,
+        "n_test": 1952,
+        "n_excluded_event_overlap": 108,
+        "max_train_snapshot": "2024-06-29T23:54:07+00:00",
+        "max_train_closure_proxy": "2024-06-30T23:54:07+00:00",
+        "min_test_snapshot": "2024-07-01T00:17:20+00:00"
+      },
+      {
+        "month": "2024-08",
+        "status": "evaluated",
+        "n_train": 11195,
+        "n_train_events": 1658,
+        "n_test": 2363,
+        "n_excluded_event_overlap": 55,
+        "max_train_snapshot": "2024-07-30T23:56:50+00:00",
+        "max_train_closure_proxy": "2024-07-31T23:56:50+00:00",
+        "min_test_snapshot": "2024-08-01T00:17:02+00:00"
+      },
+      {
+        "month": "2024-09",
+        "status": "evaluated",
+        "n_train": 13338,
+        "n_train_events": 1911,
+        "n_test": 2873,
+        "n_excluded_event_overlap": 90,
+        "max_train_snapshot": "2024-08-30T21:33:19+00:00",
+        "max_train_closure_proxy": "2024-08-31T21:33:19+00:00",
+        "min_test_snapshot": "2024-09-01T00:03:38+00:00"
+      },
+      {
+        "month": "2024-10",
+        "status": "evaluated",
+        "n_train": 15529,
+        "n_train_events": 2186,
+        "n_test": 4347,
+        "n_excluded_event_overlap": 127,
+        "max_train_snapshot": "2024-09-29T23:56:10+00:00",
+        "max_train_closure_proxy": "2024-09-30T23:56:10+00:00",
+        "min_test_snapshot": "2024-10-01T00:18:40+00:00"
+      },
+      {
+        "month": "2024-11",
+        "status": "evaluated",
+        "n_train": 18160,
+        "n_train_events": 2470,
+        "n_test": 4679,
+        "n_excluded_event_overlap": 115,
+        "max_train_snapshot": "2024-10-30T23:45:08+00:00",
+        "max_train_closure_proxy": "2024-10-31T23:45:08+00:00",
+        "min_test_snapshot": "2024-11-01T00:33:39+00:00"
+      },
+      {
+        "month": "2024-12",
+        "status": "evaluated",
+        "n_train": 24497,
+        "n_train_events": 2975,
+        "n_test": 4212,
+        "n_excluded_event_overlap": 546,
+        "max_train_snapshot": "2024-11-29T22:51:11+00:00",
+        "max_train_closure_proxy": "2024-11-30T22:51:11+00:00",
+        "min_test_snapshot": "2024-12-01T00:02:24+00:00"
+      },
+      {
+        "month": "2025-01",
+        "status": "evaluated",
+        "n_train": 28364,
+        "n_train_events": 3261,
+        "n_test": 4777,
+        "n_excluded_event_overlap": 419,
+        "max_train_snapshot": "2024-12-30T23:56:27+00:00",
+        "max_train_closure_proxy": "2024-12-31T23:56:27+00:00",
+        "min_test_snapshot": "2025-01-01T00:29:56+00:00"
+      },
+      {
+        "month": "2025-02",
+        "status": "evaluated",
+        "n_train": 34495,
+        "n_train_events": 3761,
+        "n_test": 4809,
+        "n_excluded_event_overlap": 327,
+        "max_train_snapshot": "2025-01-30T20:43:54+00:00",
+        "max_train_closure_proxy": "2025-01-31T20:43:54+00:00",
+        "min_test_snapshot": "2025-02-01T00:31:46+00:00"
+      },
+      {
+        "month": "2025-03",
+        "status": "evaluated",
+        "n_train": 39011,
+        "n_train_events": 4156,
+        "n_test": 5596,
+        "n_excluded_event_overlap": 684,
+        "max_train_snapshot": "2025-02-27T22:19:56+00:00",
+        "max_train_closure_proxy": "2025-02-28T22:19:56+00:00",
+        "min_test_snapshot": "2025-03-01T00:05:34+00:00"
+      },
+      {
+        "month": "2025-04",
+        "status": "evaluated",
+        "n_train": 44121,
+        "n_train_events": 4641,
+        "n_test": 6535,
+        "n_excluded_event_overlap": 842,
+        "max_train_snapshot": "2025-03-30T23:41:51+00:00",
+        "max_train_closure_proxy": "2025-03-31T23:41:51+00:00",
+        "min_test_snapshot": "2025-04-01T00:22:06+00:00"
+      },
+      {
+        "month": "2025-05",
+        "status": "evaluated",
+        "n_train": 52351,
+        "n_train_events": 5211,
+        "n_test": 6985,
+        "n_excluded_event_overlap": 360,
+        "max_train_snapshot": "2025-04-29T20:33:34+00:00",
+        "max_train_closure_proxy": "2025-04-30T20:33:34+00:00",
+        "min_test_snapshot": "2025-05-01T00:52:32+00:00"
+      },
+      {
+        "month": "2025-06",
+        "status": "evaluated",
+        "n_train": 60067,
+        "n_train_events": 5765,
+        "n_test": 6926,
+        "n_excluded_event_overlap": 347,
+        "max_train_snapshot": "2025-05-30T23:58:38+00:00",
+        "max_train_closure_proxy": "2025-05-31T23:58:38+00:00",
+        "min_test_snapshot": "2025-06-01T00:10:28+00:00"
+      },
+      {
+        "month": "2025-07",
+        "status": "evaluated",
+        "n_train": 67004,
+        "n_train_events": 6381,
+        "n_test": 6150,
+        "n_excluded_event_overlap": 261,
+        "max_train_snapshot": "2025-06-29T23:29:34+00:00",
+        "max_train_closure_proxy": "2025-06-30T23:29:34+00:00",
+        "min_test_snapshot": "2025-07-01T00:00:06.799632072+00:00"
+      },
+      {
+        "month": "2025-08",
+        "status": "evaluated",
+        "n_train": 75889,
+        "n_train_events": 7091,
+        "n_test": 75,
+        "n_excluded_event_overlap": 31,
+        "max_train_snapshot": "2025-07-30T23:49:24+00:00",
+        "max_train_closure_proxy": "2025-07-31T23:49:24+00:00",
+        "min_test_snapshot": "2025-08-01T00:54:37+00:00"
+      },
+      {
+        "month": "2025-09",
+        "status": "evaluated",
+        "n_train": 76643,
+        "n_train_events": 7203,
+        "n_test": 6,
+        "n_excluded_event_overlap": 2,
+        "max_train_snapshot": "2025-08-30T19:17:52+00:00",
+        "max_train_closure_proxy": "2025-08-31T19:17:52+00:00",
+        "min_test_snapshot": "2025-09-04T09:15:52+00:00"
+      },
+      {
+        "month": "2025-10",
+        "n_train": 76664,
+        "n_excluded_event_overlap": 2,
+        "status": "all_events_seen"
+      },
+      {
+        "month": "2025-11",
+        "n_train": 76664,
+        "n_excluded_event_overlap": 2,
+        "status": "all_events_seen"
+      },
+      {
+        "month": "2025-12",
+        "n_train": 76664,
+        "n_excluded_event_overlap": 10,
+        "status": "all_events_seen"
+      }
+    ],
     "by_horizon": {
       "1": {
-        "n": 22922,
-        "brier_price": 0.08050316928060379,
-        "brier_gbm_full": 0.08045187378144679,
-        "dm_t": 0.09618882929571171
+        "n": 22574,
+        "brier_price": 0.08092117718392841,
+        "brier_gbm_full": 0.08032391121416799,
+        "dm_t": 1.1377281154230825
       },
       "3": {
-        "n": 17630,
-        "brier_price": 0.07944515360181507,
-        "brier_gbm_full": 0.0787139698009961,
-        "dm_t": 1.4824302993579446
+        "n": 17298,
+        "brier_price": 0.07977360625505839,
+        "brier_gbm_full": 0.07888139153323233,
+        "dm_t": 1.7906429004085043
       },
       "7": {
-        "n": 11674,
-        "brier_price": 0.071483941279767,
-        "brier_gbm_full": 0.07039600679166924,
-        "dm_t": 1.9349665607413227
+        "n": 11484,
+        "brier_price": 0.0711024316657959,
+        "brier_gbm_full": 0.07051107513901556,
+        "dm_t": 0.9749505855924643
       },
       "14": {
-        "n": 8350,
-        "brier_price": 0.06038985898203592,
-        "brier_gbm_full": 0.05982825243298961,
-        "dm_t": 0.932962275859963
+        "n": 8244,
+        "brier_price": 0.060340340035177104,
+        "brier_gbm_full": 0.060914642475166744,
+        "dm_t": -0.8430562554951978
       },
       "30": {
-        "n": 5573,
-        "brier_price": 0.06567963421855375,
-        "brier_gbm_full": 0.06575611228601325,
-        "dm_t": -0.09374942769904064
+        "n": 5506,
+        "brier_price": 0.06510212767889575,
+        "brier_gbm_full": 0.06557403771057774,
+        "dm_t": -0.5559989072471645
       },
       "60": {
-        "n": 3275,
-        "brier_price": 0.06867962778625954,
-        "brier_gbm_full": 0.06808349843959502,
-        "dm_t": 0.3989673061243481
+        "n": 3274,
+        "brier_price": 0.06870048289554062,
+        "brier_gbm_full": 0.06944697657587205,
+        "dm_t": -0.4929684106383362
       },
       "90": {
         "n": 2293,
-        "brier_price": 0.06883034834278237,
-        "brier_gbm_full": 0.06550676510947957,
-        "dm_t": 1.9568393476401478
+        "brier_price": 0.06883034834278239,
+        "brier_gbm_full": 0.06833972847682496,
+        "dm_t": 0.2865487474171546
       }
     }
   }

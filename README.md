@@ -28,7 +28,7 @@ features.
 01_fetch_markets   Gamma API market metadata
        |
        v
-03_build_sample    binary, cleanly resolved CLOB markets, volume >= $1,000
+03_build_sample    binary, closed CLOB markets, volume >= $1,000
        |
        v
 02_fetch_prices    CLOB API daily YES prices for the sampled markets
@@ -50,225 +50,149 @@ stages, so a stage can be rerun on its own once its inputs exist.
 
 ## Results
 
-The historical sample contains 26,896 markets with usable price histories, of
-which 26,887 contribute 83,773 market–horizon observations to the calibration
-panel. Scheduled end dates are restricted to July 31, 2025 or earlier, with a
-lifetime-volume threshold of $1,000. Markets listed for less than 1.5 days
-before the closure-time proxy are also excluded (3,745 markets, leaving 27,359
-before price-history screening). These retrospective filters limit the
-population to which results apply.
+The included results were regenerated on **1 October 2026** after correcting
+forecast timing, event-size availability, tied-price calibration, and blend
+tuning. They supersede the earlier saved estimates.
 
-### Calibration and trading after costs
+The sample contains 26,967 markets before price-history
+screening and 26,508 with usable histories. Of these, 26,499
+contribute 82,610 calibration observations across seven horizons from
+1 to 90 days. The model feature dataset has 135,522 rows across both
+date anchorings. Markets must be closed with binary YES/NO outcomes, have
+scheduled end dates through 31 July 2025 and lifetime volume of at least $1,000.
+The retrospective minimum-lifetime filter is 1.5 days from creation to closure.
+Explicitly unresolved statuses (including proposed and disputed) are excluded.
+The legacy `all_resolved_markets` key in the construction counts names the raw
+closed-market input; the subsequent filters determine label eligibility.
 
-The calibration panel prices each market h days before its closure-time proxy,
-at seven horizons from 1 to 90 days (26,874 markets at 1 day, 2,463 at 90).
+### Calibration
 
-- **Prices are close to calibrated but show a favorite–longshot bias.** A
-  logistic regression of outcomes on price log-odds gives slopes between 1.01
-  and 1.13 across the seven horizons (1.07 at 7 days, event-clustered SE 0.025).
-  A slope above 1 means favorites resolve YES more often than their prices
-  imply and longshots less often. Quotes anchored to scheduled end dates give
-  similar slopes (1.02 to 1.13).
-- **Mid-priced contracts are overpriced, and more so at long horizons.**
-  Contracts priced between 10% and 90% resolve YES 2.5 percentage points less
-  often than their prices imply one day out, and 10.5 points less at 90 days.
-- **The biases are not reliably tradable after costs.** Buying NO on
-  longshots priced 1–10% seven days out returns 1.2% per trade before costs
-  (event-clustered t = 4.5) and 0.1% after costs (t = 0.5). Costs are a flat
-  1¢ per contract added to the price paid; see
-  [Backtest design](#backtest-design). Six net-of-cost tests cover buying
-  favorites priced 90–99% and fading longshots, at 7 and 30 days, plus a
-  30-day schedule-anchored check. Only the 30-day
-  longshot fade keeps an event-clustered t above 2 after costs (+0.9% per
-  trade, t = 2.8), and it falls to +0.6% (t = 1.7) when quotes are anchored to
-  scheduled end dates. Weighting months equally, the six net monthly-mean
-  t-statistics range from −0.7 to 1.2.
+Price log-odds calibration slopes range from 1.01 to
+1.13. At seven days, the slope is
+1.075
+(event-clustered SE 0.025).
+The CORP decomposition now pools tied prices before isotonic fitting and
+matches sklearn's isotonic solution. Its identity is
+`Brier = miscalibration - discrimination + uncertainty`.
+The separate fixed-bin decomposition describes the binned forecasts; its
+residual relative to the raw Brier score is recorded explicitly.
 
 ![Calibration by forecast horizon](figures/calibration/fig1_calibration_by_horizon.png)
 
-In the calibration figures, "resolution" refers to the closure-time proxy
-described under [Design and limits](#design-and-limits).
-
-![Calibration slope by horizon](figures/calibration/fig3_slope_by_horizon.png)
+Calibration-error intervals resample entire events and recompute both mean
+outcomes and mean prices. Closure dates are proxies, as explained below.
 
 ### Forecast models
 
-The primary model comparison uses **57,957 evaluated observations across 26 test
-months and 6,167 event clusters**. These are market observations at multiple
-horizons, not 57,957 distinct markets. Lower Brier scores are better.
+The primary scheduled-end comparison has **55,826 evaluated observations,
+25 test months and 6,021 event clusters**. These are
+market–horizon observations, not distinct markets. Lower Brier scores are better.
 
-| Forecast | Pooled Brier score, scheduled-end anchoring |
+| Forecast | Pooled Brier score |
 | --- | ---: |
-| Market price | 0.0774024 |
-| Logistic recalibration | 0.0768240 |
-| Isotonic recalibration | 0.0768463 |
-| Full LightGBM model | 0.0787792 |
+| Market price | 0.0785305 |
+| Isotonic recalibration | 0.0777421 |
+| Logistic recalibration | 0.0778376 |
+| Full LightGBM | 0.0798224 |
 
-The logistic model reduces pooled Brier error by about 0.75%, while the full GBM
-underperforms the price in this pooled comparison. The logistic improvement is
-not consistent under equal weighting of test months: the saved monthly
-t-statistic is −0.20, versus 4.05 under event-clustered inference. Results also
-vary by horizon and by scheduled-end versus closure-time-proxy anchoring.
+Isotonic has the lowest pooled score in this comparison, a
+1.00% reduction relative
+to the price. Its event-clustered t is 2.42, while the
+equal-month t is -0.32. Logistic reduces pooled error by
+0.88%
+(event t = 4.46; monthly t = 1.53).
+The full GBM underperforms the price. These differences do not establish
+consistent prospective forecast gains.
 
-Trading on model–price disagreement does not reliably survive costs either.
-Using the schedule-anchored out-of-sample predictions, the backtest buys the
-side the full GBM favors whenever its forecast differs from the price by more
-than 2, 5 or 10 points. After the same 1¢ cost, the pooled event-clustered t
-is 2.4 at the 10-point threshold (+6.3% per trade), but the monthly-mean t-statistic
-ranges from −1.2 to 0.2 across the three thresholds, so the gains are not
-consistent from month to month.
-
-The Brier scores come from [saved model metrics](results/models/model_metrics.json).
-The [calibration analysis](results/analysis.json),
-[model diagnostics and divergence backtest](results/models/interpretation.json), and
-[supplementary comparisons](results/models/supplement.json) provide more detail.
-They are archived outputs with known timing limitations, including some
-post-closure snapshots, as detailed under [Design and limits](#design-and-limits).
-They do not establish fully point-in-time forecast performance or profitable
-trading after realistic execution costs. The checks below do not refit the
-full historical study.
+The split-sample GBM blend chooses weight 0.05 using
+5,501 early predictions whose closure-time proxies precede the
+2024-07 cutoff, then evaluates 49,405 later
+predictions from disjoint events. Its improvement has event t =
+4.93 and monthly t = 3.91.
+The full-sample blend curves are descriptive, not tuning evidence.
 
 ![Model comparison](figures/models/fig2_1_model_ladder.png)
 
-The model-comparison error bars use event-clustered standard errors. They do not
-represent the equal-month inference described above.
+Error bars above are 1.96 times event-clustered standard errors. Equal-month
+inference answers a different question and is reported separately.
 
-### Backtest design
+### Backtest design and limits
 
-Both backtests are per-trade tests of a signal, not a managed portfolio.
+Calibration backtests buy YES at prices 90–99% or buy NO when YES costs 1–10%,
+at 7- and 30-day closure-proxy horizons, plus a 30-day scheduled-end comparison.
+The model backtest buys the side favored by the full GBM when its forecast
+differs from the price by more than 2, 5 or 10 percentage points.
 
-- **Signal and entry.** The calibration backtests buy YES on every market
-  priced 90–99% and buy NO on every market priced 1–10%, 7 or 30 days before
-  the closure-time proxy (the schedule-anchored check uses 30 days before the
-  scheduled end). The divergence backtest buys the side the full GBM favors
-  whenever its out-of-sample forecast differs from the price by more than the
-  threshold.
-- **Execution and costs.** Each trade enters at that day's price plus a flat
-  1¢ per contract (buying NO at 1 − p costs 1 − p + 0.01) and is held to
-  resolution, so there is no exit trade. Daily prices are not bid/ask quotes,
-  so these are price-based fills, not executable ones.
-- **Sizing.** Every qualifying market–horizon observation is one equal unit
-  stake, with no compounding, capital limit or position cap. Several markets
-  from the same event can be held at once.
-- **Risk and inference.** A trade returns its payoff divided by its cost,
-  minus 1, so a losing trade loses the whole stake. After costs the longshot
-  fades profit on about 95–96% of trades and lose the whole stake on 2–3%,
-  when the longshot resolves YES. The remaining 1–2.5% are bought at a 1%
-  price, so NO costs exactly $1 and only breaks even. No stop-losses or
-  exposure limits are modelled. Dependence between markets is
-  handled in the inference instead: standard errors are clustered by event,
-  and a second test weights months equally (the monthly-mean t).
+Each observation receives an equal monetary stake. Entry cost is price plus
+1 cent per contract; the position is held to settlement. Buying NO costs
+`1 - p + 0.01`. Return is payoff divided by entry cost minus one. A losing
+trade loses the full stake; some winning outcomes merely break even after costs.
+There is no compounding, capital budget, position cap or executable bid/ask model.
+Repeated horizons and related markets can represent overlapping positions.
 
-## Run offline checks
+| Model disagreement threshold | Mean return after 1 cent | Event t | Monthly t |
+| --- | ---: | ---: | ---: |
+| 2 points | -5.10% | -3.21 | -1.81 |
+| 5 points | 1.62% | 0.81 | 0.26 |
+| 10 points | 7.53% | 2.20 | 0.81 |
 
-Use Python 3.11 and run these commands from this folder:
+These are price-based signal tests, not evidence of achievable portfolio returns.
+Calibration backtests group monthly returns by closure-proxy month; model
+backtests and forecast comparisons group by snapshot month. Cluster mean tests
+use asymptotic CR0 errors. Monthly t statistics assume independent month means;
+they are not adjusted for serial correlation. Model selection and multiple
+comparisons on the same retrospective dataset remain limitations.
+
+See the [calibration aggregates](results/analysis.json),
+[model metrics and fold diagnostics](results/models/model_metrics.json),
+[interpretation and backtests](results/models/interpretation.json), and
+[supplementary comparisons](results/models/supplement.json).
+
+## Run offline
+
+Use Python 3.11:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python code/00_setup.py
 python -m unittest discover -s tests -v
-python code/07_tables.py
-```
-
-On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell. On macOS,
-LightGBM may also need the native OpenMP runtime (`brew install libomp`).
-The dependencies include NumPy, pandas, SciPy, statsmodels, matplotlib,
-scikit-learn, LightGBM, and PyArrow.
-
-The tests exercise research calculations using synthetic inputs, run stages 03,
-04, 05, 07 and 08 end to end on the [synthetic sample](#synthetic-sample) in a
-temporary copy, and check consistency of the saved aggregates. The final command
-regenerates calibration tables at `results/tables.md` from the included JSON
-without network access.
-Every script locates the project relative to its own file, so moving the folder
-or running an absolute script path from a different working directory works.
-
-## Data and reproduction
-
-Aggregate statistics and figures are included. The historical raw market
-records, price histories, processed datasets, and per-observation predictions
-are **not bundled**; only the synthetic sample below is. Consequently this
-folder alone cannot reproduce the historical estimates or regenerate every
-figure. The original environment was not fully archived;
-dependency pins describe a reproduction environment rather than an exact record
-of the historical run.
-
-### Synthetic sample
-
-`sample/` holds a small synthetic dataset (about 430 KB) in the two raw input
-formats described below: 293 metadata rows in `markets_meta.jsonl` and one
-price-history record for each of the 231 markets that pass the inclusion
-filters in `price_histories.jsonl`. `sample/make_sample.py` generates both files
-deterministically. Every market, place, team and price is invented; none of it
-is Polymarket data, and statistics computed from it are not research results.
-
-Prices follow a latent-path model in which each quote starts as a calibrated
-probability. The generator then plants a favorite–longshot bias: true log-odds
-are 1.1 times the quoted log-odds. Some metadata rows are planted so that each
-is removed at a chosen step of `03`'s sequential filters (the first filter it
-fails). Some histories are failed, empty, single-print or
-gapped. Together they exercise every sample-construction count and the
-1.5-day staleness limit.
-
-To run the early stages on the sample without touching the included results:
-
-```bash
 python sample/run_sample.py
 ```
 
-The runner copies `code/` and the sample into a new temporary project root, runs
-`03`, `04`, `05`, `07` and `08` there, and prints where the outputs are; pass
-`--workdir DIR` to choose a new or empty directory instead.
-`tests/test_sample_pipeline.py` runs the same stages and checks filter counts,
-no-look-ahead timing of panel prices and feature snapshots, and reconciliation
-of the calibration outputs. The sample is too small for `06`, which plots 30-
-and 90-day calibration bins that need 200 observations each, and for the model
-stages `09`–`12`.
+On Windows activate with `.venv\Scripts\Activate.ps1`. LightGBM may need
+`libomp` on macOS. The sample runner creates a separate temporary project, runs
+`00`, `03`, `04`, `05`, `06`, `07` and `08`, and reports its output path.
+Use `--workdir DIR` to choose a new or empty directory. It preserves the included
+results and generates all six calibration charts, even when long horizons have
+too few observations. The bundled runner demonstrates early stages; its small
+synthetic inputs are for software checks, not empirical research.
 
-### Full pipeline
+The tests cover malformed input, retries and interrupted resume, timing and
+event availability, single-class fitting, tied-price calibration, uncertainty,
+blend tuning, sample safety, and reconciliation of saved aggregates. They do not
+recreate the historical model fits. Every script uses paths relative to its own
+location, so relocated copies and execution from another directory are supported.
 
-To run the full pipeline, supply the two JSONL inputs at
-`data/raw/markets_meta.jsonl` and `data/raw/price_histories.jsonl`, or collect fresh
-inputs using the included fetchers. The metadata schema is defined by `KEEP`
-and the event fields in `code/01_fetch_markets.py`; price histories contain an
-`id`, `n`, and `history` pairs of Unix timestamp and YES price, as written by
-`code/02_fetch_prices.py`.
+## Data and full reproduction
 
-For fresh collection, start with empty input directories in a separate copy.
-Live metadata collection requires `curl` on `PATH`:
+Only synthetic raw inputs, aggregate results and figures are included here.
+Historical raw records, processed datasets and individual predictions are not
+bundled. This folder alone cannot reproduce the historical estimates.
+The synthetic sample has 293 invented metadata rows and 231 history records,
+including intentionally failed, empty, single-print and gapped histories.
+`python sample/make_sample.py` regenerates it deterministically.
+
+For a historical rerun, supply `data/raw/markets_meta.jsonl` and
+`data/raw/price_histories.jsonl` in a separate project copy, then run:
 
 ```bash
 python code/00_setup.py
-python code/01_fetch_markets.py
-python code/03_build_sample.py
-python code/02_fetch_prices.py
-```
-
-The metadata fetcher defaults to end-date windows from 2020 through 2030 and
-checkpoints completed windows. `03` restricts the research sample to the cutoff
-above. The price fetcher requests `/prices-history` with `interval=max` and
-`fidelity=1440` for daily sampling. Fetchers resume saved IDs instead of refreshing
-them. Price requests that fail are saved with `n=-1`; remove those failed records
-from your working input before retrying. Metadata requests stop after six failed
-attempts; changed API pagination caps may require narrower windows or changes to
-the fetcher. Live API collection was not exercised for this release, and coverage
-or API behavior can differ from the archived research snapshot.
-
-With both input files available, run the calibration study:
-
-```bash
 python code/03_build_sample.py
 python code/04_build_panel.py
 python code/05_analysis.py
 python code/06_figures.py
 python code/07_tables.py
-```
-
-Then run the model comparison:
-
-```bash
 python code/08_features.py
 python code/09_model.py
 python code/10_interpret.py
@@ -276,64 +200,86 @@ python code/12_supplement.py
 python code/11_figures2.py
 ```
 
-Run `12` before `11`, because the figure/table script reads `supplement.json`.
-The model stage repeatedly fits the model ladder for both date anchorings.
-Random seeds are set to 42; numerical results can vary across library builds
-and platforms. In September 2026 a full rerun of stages `03`–`12` from the
-original inputs, with Python 3.11.7 and the pinned dependencies on macOS,
-reproduced every included result file and figure byte for byte. Pipeline runs
-overwrite generated results and figures, so keep the included aggregates in a
-separate copy when comparing a new run.
+`12` must precede `11`, which reads its supplementary comparisons. Each stage
+overwrites its generated outputs. The complete sequence was executed in a
+fresh isolated environment using the pinned dependencies on 1 October 2026.
+Random seeds are 42; numeric results can vary between library builds and platforms.
+For efficient fitting, set `OPENBLAS_NUM_THREADS=1` and
+`VECLIB_MAXIMUM_THREADS=1` before starting Python; LightGBM itself uses four threads.
+
+For new collection, start with an empty `data/raw/` in another copy, run `00`,
+then `01_fetch_markets.py`, `03_build_sample.py`, `02_fetch_prices.py`, and
+continue from `04` above. Metadata collection requires `curl`. The price request
+uses a token ID, `interval=max` and `fidelity=1440`, as described in the
+[history API reference](https://docs.polymarket.com/api-reference/markets/get-prices-history).
+The [market API reference](https://docs.polymarket.com/api-reference/markets/list-markets)
+documents metadata and date filters.
+
+The collectors validate responses, retry transient failures with a finite limit,
+checkpoint completed metadata windows atomically, and retry previously failed
+price requests on resume. Price failures exit with an error after preserving
+completed work. Successful empty histories are skipped on resume. Interrupted
+final JSONL fragments are preserved separately before append recovery; malformed
+complete records and conflicting timestamps fail explicitly. Metadata pagination
+splits crowded date windows and reports a failure if the window cannot be split
+further. Successful saved IDs are retained rather than refreshed.
+
+Bounded live smoke checks retrieved one Gamma market and one CLOB history on
+1 October 2026. A complete new collection was not run. API coverage, pagination
+behavior and metadata can change, so these checks do not prove universe completeness.
 
 ## Design and limits
 
-- Price-path features use observations at or before each forecast snapshot,
-  with a 1.5-day staleness limit. Lifetime volume and current liquidity are
-  excluded as predictive features; lifetime volume still selects the sample.
-- Resolution timing uses `closedTime`, falling back to `endDate`. This is a
-  closure-time proxy, not a separately verified outcome-availability timestamp.
-  Monthly training requires the proxy to precede the test month but does not
-  separately require every training snapshot to precede that month.
-- Scheduled-end snapshots can fall at or after the closure-time proxy. A check
-  of the original archived inputs and predictions found 1,396 of 57,957 primary
-  test observations (2.4%) in this category, plus 35 training-row appearances
-  across monthly folds with snapshots at or after the test month's start.
-  Stricter timing filters and a refit are needed to establish fully point-in-time
-  performance; the included results retain the original timing conventions.
-- Test events overlapping training events are excluded. Early stopping holds
-  out whole events, and TF-IDF/SVD text transformations are fitted on the
-  burn-in sample.
-- These temporal checks do not establish that all metadata was available at
-  the original forecast time. Market questions, scheduled dates, event groupings,
-  and universe membership were collected retrospectively.
-- Closure-time-proxy anchoring is the primary design of the calibration
-  study, including its 7- and 30-day backtests, and a robustness comparison in
-  the model study. It is retrospective because closure times are not known in
-  advance; the schedule-anchored calibration and 30-day backtest check this.
-  Scheduled-end anchoring also depends on the accuracy of historical metadata.
-- Calibration and model comparisons are retrospective research. Exploring
-  specifications on an observed sample can influence model selection. Daily
-  prices do not provide executable bid/ask quotes, depth, or a slippage model.
-- The archived CORP score decomposition fits individual sorted observations
-  without pooling tied prices first. Its components can depend on outcome order
-  within ties; treat those components as provisional. This does not affect the
-  directly computed Brier scores in the model-comparison table above.
+- Forecast snapshots must be at or after market creation and strictly before
+  `t_res`, the closure-time proxy (`closedTime`, with `endDate` fallback).
+  This proxy does not independently establish outcome availability.
+  Missing creation dates use the first observed quote as the snapshot lower
+  bound; the metadata lifetime filter cannot exclude those unknown lifetimes.
+- Labels require a closed market and terminal outcome prices of 0 and 1.
+  An explicit resolution status must be `resolved`. Legacy missing statuses
+  remain eligible under the closed/terminal-price rule; those labels and the
+  metadata were not independently verified against historical oracle records.
+  [Proposal and dispute are separate stages from final resolution](https://docs.polymarket.com/concepts/resolution).
+- Prices and path features use only quotes at or before the snapshot, with a
+  1.5-day staleness limit. Precreation and invalid quotes are excluded. Probabilities
+  are clipped to `[0.001, 0.999]` for modelling and log-odds calculations.
+- Event size counts sampled markets created by the snapshot; first observed
+  quotes supply a fallback when creation is missing. Future-created siblings
+  do not contribute. Lifetime volume and current liquidity are excluded as
+  predictors, although lifetime volume still determines sample selection.
+  Invalid scheduled lifetimes become missing features; positive lifetimes use
+  the actual denominator, even for unusually short schedules or late closures.
+- Monthly training requires both snapshot and closure proxy to precede the
+  test month. Test events appearing in training are excluded. The first six
+  observed snapshot months form burn-in; folds need at least 500 training rows.
+- TF-IDF/SVD is fitted only on eligible burn-in data. Early stopping holds out
+  entire events ordered by their latest training snapshot. Its selected tree
+  count is then refitted on every eligible training row. Single-class cases
+  use explicit binary probabilities or the fixed training budget.
+- Blend tuning uses only closure proxies preceding its fixed cutoff, followed by
+  evaluation on later rows from different events. Fold sizes and timestamp
+  bounds are recorded in the model metrics; predictions retain snapshot times.
+- Questions, scheduled dates, event membership and the resolved-market universe
+  were collected retrospectively. These corrections remove identified timing
+  violations but do not establish a fully point-in-time dataset. Closure-proxy
+  anchoring is retrospective; scheduled-end anchoring also relies on historical
+  metadata accuracy. This work does not establish prospective profitability.
 
 ## Files
 
 ```text
-code/                 Collection, sample construction, analysis, models, figures
-sample/               Synthetic raw inputs, their generator, and a stage runner
-tests/                Offline checks, sample-pipeline smoke test, saved aggregates
-results/              Calibration-study aggregates and calibration bins
-results/models/       Model-comparison metrics, diagnostics, and supplement
-figures/calibration/  Calibration-study figures
-figures/models/       Model-comparison figures
+code/                 Collection, construction, analysis, models and charts
+sample/               Invented inputs, generator and isolated runner
+tests/                Unit regressions, sample workflow and aggregate checks
+results/              Calibration aggregates and bins
+results/models/       Model metrics, interpretation and supplementary results
+figures/calibration/  Six calibration figures
+figures/models/       Six model figures
 requirements.txt      Python 3.11 dependency pins
 LICENSE               MIT license for original code and documentation
 ```
 
 ## License
 
-Original code and documentation are licensed under the [MIT License](LICENSE).
-Third-party data and linked sources remain subject to their respective terms.
+Original code and documentation use the [MIT License](LICENSE).
+Third-party data remain subject to their respective terms.

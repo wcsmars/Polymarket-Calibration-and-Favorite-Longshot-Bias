@@ -1,7 +1,8 @@
 """Build the study sample from raw market metadata.
 
 Inclusion criteria, applied in this order:
-  - binary Yes/No market, resolved cleanly to 0 or 1
+  - binary Yes/No market, closed with terminal 0/1 prices; reject explicit
+    nonfinal UMA statuses (legacy rows with no status remain a qualified proxy)
   - order-book (CLOB) market with token ids
   - parseable closure-time proxy (closedTime, falling back to endDate)
   - parseable scheduled end date (endDate) on or before END_CUTOFF
@@ -14,16 +15,20 @@ counts that document sample construction.
 import json
 from pathlib import Path
 import re
+import sys
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_io import market_id, parse_flag, read_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = f"{ROOT}/data/raw/markets_meta.jsonl"
 OUT = f"{ROOT}/data/processed/sample_markets.csv"
 MIN_VOLUME = 1000.0
-# Universe cutoff: metadata collection is verified complete for markets with
-# scheduled end date on or before this date (window-fetch coverage boundary).
+# Study cutoff for scheduled end dates in the archived collection.
+# Completed collection windows alone do not prove market-universe completeness.
 END_CUTOFF = "2025-07-31 23:59:59+00:00"
 
 CATEGORY_RULES = [
@@ -60,17 +65,37 @@ def derive_category(question, slug, raw_cat):
     return "other"
 
 
+def final_or_legacy_resolution(status):
+    """A proposal/dispute is not final; missing legacy status remains unverified."""
+    if status is None or (isinstance(status, float) and np.isnan(status)):
+        return True
+    return isinstance(status, str) and status.strip().lower() in {"", "resolved"}
+
+
 def main():
-    rows = []
-    with open(RAW) as f:
-        for line in f:
-            rows.append(json.loads(line))
-    df = pd.DataFrame(rows)
+    records = {}
+    for row in read_jsonl(RAW):
+        identifier = market_id(row.get("id"))
+        row["id"] = identifier
+        if identifier in records and records[identifier] != row:
+            raise ValueError(f"Conflicting metadata records for market {identifier}")
+        records[identifier] = row
+    if not records:
+        raise ValueError("No market metadata records found")
+    df = pd.DataFrame(records.values())
+    # Optional Gamma fields can be absent from an entire API page or snapshot.
+    for column in ["question", "slug", "category", "closedTime", "endDate", "createdAt",
+                   "volumeNum", "liquidityNum", "outcomes", "outcomePrices", "clobTokenIds",
+                   "enableOrderBook", "eventIds", "eventNegRisk", "negRisk", "closed",
+                   "umaResolutionStatus"]:
+        if column not in df:
+            df[column] = None
     counts = {"all_resolved_markets": len(df)}
 
     def parse_list(s):
         try:
-            return json.loads(s) if isinstance(s, str) else None
+            value = json.loads(s) if isinstance(s, str) else s
+            return value if isinstance(value, list) else None
         except Exception:
             return None
 
@@ -79,8 +104,10 @@ def main():
     df["tokens_l"] = df["clobTokenIds"].map(parse_list)
 
     binary = df["outcomes_l"].map(lambda x: isinstance(x, list) and len(x) == 2
-                                  and str(x[0]).lower() == "yes" and str(x[1]).lower() == "no")
-    df = df[binary]
+                                  and {str(v).strip().lower() for v in x} == {"yes", "no"})
+    df = df[binary].copy()
+    df["yes_index"] = df["outcomes_l"].map(
+        lambda x: [str(v).strip().lower() for v in x].index("yes"))
     counts["binary_yes_no"] = len(df)
 
     def clean_outcome(pl):
@@ -96,12 +123,24 @@ def main():
             return 0
         return None  # ambiguous (e.g., 0.5/0.5) or unresolved
 
-    df["y"] = df["prices_l"].map(clean_outcome)
-    df = df[df["y"].notna()]
+    df["y"] = [clean_outcome(prices if index == 0 else
+                               list(reversed(prices)) if isinstance(prices, list) else prices)
+               for prices, index in zip(df["prices_l"], df["yes_index"])]
+    # Neither closure nor a traded price of 0/1 proves a proposed or disputed
+    # outcome is final. Older records without UMA status remain a documented
+    # limitation rather than being silently treated as verified settlements.
+    terminal_closed = df["y"].notna() & df["closed"].map(parse_flag)
+    final_status = df["umaResolutionStatus"].map(final_or_legacy_resolution)
+    nonfinal_count = int((terminal_closed & ~final_status).sum())
+    df = df[terminal_closed & final_status].copy()
     counts["clean_resolution"] = len(df)
 
-    has_tok = df["tokens_l"].map(lambda x: isinstance(x, list) and len(x) == 2 and all(x))
-    df = df[has_tok & (df["enableOrderBook"] != False)]
+    has_tok = df["tokens_l"].map(lambda x: isinstance(x, list) and len(x) == 2
+                                and all(isinstance(t, (str, int)) and not isinstance(t, bool)
+                                        and str(t).strip() for t in x)
+                                and str(x[0]) != str(x[1]))
+    enabled = df["enableOrderBook"].map(lambda value: parse_flag(value, None) is not False)
+    df = df[has_tok & enabled].copy()
     counts["clob_market"] = len(df)
 
     df["t_close"] = pd.to_datetime(df["closedTime"], errors="coerce", utc=True, format="mixed")
@@ -116,7 +155,7 @@ def main():
     counts["end_date_cutoff"] = len(df)
 
     df["volumeNum"] = pd.to_numeric(df["volumeNum"], errors="coerce").fillna(0)
-    df = df[df["volumeNum"] >= MIN_VOLUME]
+    df = df[np.isfinite(df["volumeNum"]) & (df["volumeNum"] >= MIN_VOLUME)].copy()
     counts["volume_filter"] = len(df)
 
     # Require >= 1.5 days before the closure-time proxy for horizon observations.
@@ -124,10 +163,12 @@ def main():
     df = df[life.isna() | (life >= 1.5)]
     counts["lifetime_filter"] = len(df)
 
-    df["yes_token"] = df["tokens_l"].map(lambda x: x[0])
+    df["yes_token"] = [str(tokens[index]).strip()
+                       for tokens, index in zip(df["tokens_l"], df["yes_index"])]
     df["event_id"] = df["eventIds"].map(lambda x: x[0] if isinstance(x, list) and x else None)
     df["event_neg_risk"] = df["eventNegRisk"].map(
-        lambda x: bool(x[0]) if isinstance(x, list) and x and x[0] is not None else False)
+        lambda x: parse_flag(x[0]) if isinstance(x, list) and x else False)
+    df["negRisk"] = df["negRisk"].map(parse_flag)
     df["cat"] = [derive_category(q, s, c) for q, s, c in
                  zip(df["question"].fillna(""), df["slug"].fillna(""), df["category"])]
 
@@ -136,9 +177,15 @@ def main():
               "event_id", "event_neg_risk", "negRisk"]].copy()
     out["y"] = out["y"].astype(int)
     out = out.sort_values("volumeNum", ascending=False)  # fetch important markets first
+    Path(OUT).parent.mkdir(parents=True, exist_ok=True)
+    (ROOT / "results").mkdir(parents=True, exist_ok=True)
     out.to_csv(OUT, index=False)
 
     print(json.dumps(counts, indent=2))
+    print("Closed terminal-price markets rejected for explicit nonfinal resolution status:", nonfinal_count)
+    legacy_status_count = int(df["umaResolutionStatus"].map(
+        lambda status: not isinstance(status, str) or not status.strip()).sum())
+    print("Final sample markets with unverified legacy resolution status:", legacy_status_count)
     print("\nBy derived category:")
     print(out["cat"].value_counts().to_string())
     print("\nClosure-proxy year:")

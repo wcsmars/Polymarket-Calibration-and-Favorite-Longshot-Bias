@@ -1,10 +1,10 @@
 {
   "all_resolved_markets": 72578,
-  "binary_yes_no": 44387,
-  "clean_resolution": 40940,
-  "clob_market": 40932,
-  "has_resolution_time": 40932,
-  "end_date_cutoff": 35247,
-  "volume_filter": 31104,
-  "lifetime_filter": 27359
+  "binary_yes_no": 44388,
+  "clean_resolution": 40484,
+  "clob_market": 40476,
+  "has_resolution_time": 40476,
+  "end_date_cutoff": 34792,
+  "volume_filter": 30680,
+  "lifetime_filter": 26967
 }
