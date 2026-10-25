@@ -78,6 +78,20 @@ class EventSplitTests(unittest.TestCase):
         _, permuted = model.es_split(self.times[order], self.events[order], frac=0.375)
         self.assertEqual(set(self.events[original]), set(self.events[order][permuted]))
 
+    def test_tied_event_times_are_broken_by_event_key_in_any_row_order(self):
+        # Thirty events share the latest time; their keys, not sort internals or
+        # row order, decide which five are held out.
+        events = np.array([f"e{i:02d}" for i in range(30) for _ in range(2)] + ["old"] * 40)
+        times = np.array([10, 3] * 30 + [1] * 40)
+        fit, valid = model.es_split(times, events, frac=0.1)
+        self.assertEqual(set(events[valid]), {"e00", "e01", "e02", "e03", "e04"})
+        rng = np.random.default_rng(0)
+        for _ in range(5):
+            order = rng.permutation(len(events))
+            permuted_fit, permuted_valid = model.es_split(times[order], events[order], frac=0.1)
+            np.testing.assert_array_equal(permuted_valid, valid[order])
+            np.testing.assert_array_equal(permuted_fit, fit[order])
+
 
 class ScoringTests(unittest.TestCase):
     def test_scores_match_hand_calculated_binary_example(self):
@@ -185,6 +199,8 @@ class CollectionTests(unittest.TestCase):
         markets = [{"id": str(i), "endDate": end.isoformat()} for i, end in enumerate(ends)]
 
         def fake_get(params):
+            if params["offset"] > 200:
+                return []  # silent truncation past the cap: a missed split loses markets
             low = fetcher._utc(params["end_date_min"])
             high = fetcher._utc(params["end_date_max"])
             hits = [m for m, end in zip(markets, ends) if low <= end < high]
@@ -199,6 +215,24 @@ class CollectionTests(unittest.TestCase):
         saved = [json.loads(line)["id"] for line in out.getvalue().splitlines()]
         self.assertEqual(n_new, len(markets))
         self.assertEqual(sorted(saved, key=int), [m["id"] for m in markets])
+
+    def test_window_that_cannot_be_split_further_fails_clearly(self):
+        end = datetime(2025, 4, 1, 12, tzinfo=timezone.utc)
+        markets = [{"id": str(i)} for i in range(300)]
+
+        def fake_get(params):
+            low = fetcher._utc(params["end_date_min"])
+            high = fetcher._utc(params["end_date_max"])
+            hits = markets if low <= end < high else []
+            return hits[params["offset"]:params["offset"] + params["limit"]]
+
+        # 300 markets share one end second, so no date split gets under a 200-row cap.
+        # Match the message: unbounded splitting would raise RecursionError, also a RuntimeError.
+        with patch.object(fetcher, "get", side_effect=fake_get), \
+                patch.object(fetcher, "MAX_OFFSET", 200), \
+                patch("builtins.print"):
+            with self.assertRaisesRegex(RuntimeError, "cannot be split further"):
+                fetcher.fetch_window("2025-04-01", "2025-04-02", set(), io.StringIO())
 
 
 if __name__ == "__main__":

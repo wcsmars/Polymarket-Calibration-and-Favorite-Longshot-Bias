@@ -50,37 +50,95 @@ stages, so a stage can be rerun on its own once its inputs exist.
 
 ## Results
 
-The included results were regenerated on **1 October 2026** after correcting
-forecast timing, event-size availability, tied-price calibration, and blend
-tuning. They supersede the earlier saved estimates.
+The included results were regenerated on **18 October 2026**. Relative to the
+first saved estimates, the pipeline now enforces forecast timing and event-size
+availability, pools tied prices in the calibration decomposition, tunes blends
+only on earlier data, places prices that sit exactly on a bin edge in the bin
+that edge opens, and gives the model stages a total row order, so each
+walk-forward fold depends only on data available before its test month.
 
-The sample contains 26,967 markets before price-history
-screening and 26,508 with usable histories. Of these, 26,499
-contribute 82,610 calibration observations across seven horizons from
-1 to 90 days. The model feature dataset has 135,522 rows across both
-date anchorings. Markets must be closed with binary YES/NO outcomes, have
-scheduled end dates through 31 July 2025 and lifetime volume of at least $1,000.
-The retrospective minimum-lifetime filter is 1.5 days from creation to closure.
-Explicitly unresolved statuses (including proposed and disputed) are excluded.
-The legacy `all_resolved_markets` key in the construction counts names the raw
-closed-market input; the subsequent filters determine label eligibility.
+Sample construction starts from 72,578 closed-market metadata records and
+applies its filters in sequence: 44,388 are binary YES/NO markets;
+40,484 of those have terminal 0/1 outcome prices and a resolution status
+that is `resolved` or not recorded; 40,476 also have two distinct CLOB token
+IDs, an order book that is not disabled and a closure-time proxy;
+34,792 have a scheduled end date on or before 31 July 2025;
+30,680 have lifetime volume of at least $1,000; and 26,967 were
+listed for at least 1.5 days before closure. Explicitly unresolved statuses,
+including proposed and disputed, are excluded. The
+[construction counts](results/sample_construction.json) store the starting
+number under the legacy key `all_resolved_markets`.
+
+Of the 26,967 sampled markets, 26,508 have usable price histories and
+26,499 contribute 82,610 calibration observations across seven horizons from
+1 to 90 days. The model feature dataset has 135,522 rows across both date
+anchorings.
 
 ### Calibration
 
-Price log-odds calibration slopes range from 1.01 to
-1.13. At seven days, the slope is
-1.075
-(event-clustered SE 0.025).
-The CORP decomposition now pools tied prices before isotonic fitting and
-matches sklearn's isotonic solution. Its identity is
+A calibrated price has a log-odds slope of 1 and an intercept of 0. Each row
+uses the latest valid quote a fixed number of days before the closure-time
+proxy. Standard errors are clustered by event.
+
+| Horizon (days) | Observations | Events | Brier score | Skill vs. base rate | Miscalibration | Log-odds slope (SE) | Log-odds intercept (SE) |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 26,485 | 7,702 | 0.0836 | 0.508 | 0.0011 | 1.106 (0.020) | -0.068 (0.027) |
+| 3 | 20,952 | 6,473 | 0.0849 | 0.481 | 0.0021 | 1.052 (0.023) | -0.117 (0.050) |
+| 7 | 13,439 | 4,509 | 0.0748 | 0.519 | 0.0011 | 1.075 (0.025) | -0.050 (0.037) |
+| 14 | 9,420 | 3,345 | 0.0624 | 0.566 | 0.0013 | 1.128 (0.030) | -0.102 (0.045) |
+| 30 | 6,256 | 2,279 | 0.0657 | 0.530 | 0.0029 | 1.120 (0.033) | -0.258 (0.049) |
+| 60 | 3,595 | 1,268 | 0.0699 | 0.502 | 0.0045 | 1.088 (0.042) | -0.376 (0.071) |
+| 90 | 2,463 | 840 | 0.0727 | 0.433 | 0.0080 | 1.006 (0.047) | -0.619 (0.078) |
+
+Prices are informative at every horizon: the Brier score is 43% to
+57% below that of a constant forecast at the horizon's base rate.
+The slope exceeds 1 by more than two standard errors from 1 to 60 days and is
+1.01 at 90 days. The intercept lies between -0.05 and -0.12 from 1 to 14
+days and falls to -0.62 at 90 days. Miscalibration is the CORP decomposition's calibration term, which
+pools tied prices before isotonic fitting; its identity is
 `Brier = miscalibration - discrimination + uncertainty`.
-The separate fixed-bin decomposition describes the binned forecasts; its
-residual relative to the raw Brier score is recorded explicitly.
 
 ![Calibration by forecast horizon](figures/calibration/fig1_calibration_by_horizon.png)
 
 Calibration-error intervals resample entire events and recompute both mean
 outcomes and mean prices. Closure dates are proxies, as explained below.
+
+### Price biases and bias strategies
+
+A slope above 1 is the favorite–longshot pattern: low-priced contracts resolve
+YES less often than their prices imply. Mean outcome minus price by price
+bucket, in percentage points with event-clustered t in parentheses:
+
+| Closure-proxy horizon | Price below 10% | Price 10–90% | Price 90% or above |
+| --- | ---: | ---: | ---: |
+| 7 days | -0.60 (-4.56) | -1.47 (-2.39) | +0.90 (1.70) |
+| 30 days | -1.20 (-6.61) | -5.37 (-6.70) | +1.59 (1.96) |
+| 90 days | -1.43 (-4.60) | -10.50 (-7.87) | -1.30 (-0.63) |
+
+YES is overpriced below 90% at each of these horizons, and the mid-range gap
+widens from 1.47 points at 7 days to 10.50 at 90. The log-odds intercept is
+negative at all seven horizons, from -0.050 (SE 0.037) at 7 days, which is not
+distinguishable from zero, to -0.619 (SE 0.078) at 90 days.
+
+![Gross return to buying YES by price bin at 7 days](figures/calibration/fig4_decile_returns.png)
+
+Strategies that trade against these biases, per trade and held to settlement
+(design under [Backtest design and limits](#backtest-design-and-limits)):
+
+| Strategy | Trades | Gross mean return | After 1 cent | Event t | Monthly t |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 7 days, buy YES at 90–99% | 626 | 1.33% | 0.28% | 0.42 | 0.25 |
+| 7 days, buy NO when YES is 1–10% | 4,056 | 1.15% | 0.11% | 0.43 | 1.16 |
+| 30 days, buy YES at 90–99% | 328 | 1.71% | 0.65% | 0.72 | -0.33 |
+| 30 days, buy NO when YES is 1–10% | 2,326 | 1.98% | 0.93% | 3.04 | 1.66 |
+| 30 days scheduled-end, buy YES at 90–99% | 277 | 1.38% | 0.33% | 0.31 | -0.77 |
+| 30 days scheduled-end, buy NO when YES is 1–10% | 1,969 | 1.69% | 0.63% | 1.74 | -0.34 |
+
+Both t statistics refer to the return after 1 cent. Only the 30-day
+closure-proxy NO strategy keeps an event t above 2 after costs (3.04), and it
+weakens to 1.74 when quotes are anchored to scheduled end dates. Weighting months
+equally, no strategy's monthly t exceeds 1.66. The biases are statistically
+clear but are not reliably tradable after a 1-cent cost.
 
 ### Forecast models
 
@@ -93,28 +151,37 @@ market–horizon observations, not distinct markets. Lower Brier scores are bett
 | Market price | 0.0785305 |
 | Isotonic recalibration | 0.0777421 |
 | Logistic recalibration | 0.0778376 |
-| Full LightGBM | 0.0798224 |
+| Full LightGBM | 0.0798941 |
 
-Isotonic has the lowest pooled score in this comparison, a
-1.00% reduction relative
-to the price. Its event-clustered t is 2.42, while the
-equal-month t is -0.32. Logistic reduces pooled error by
-0.88%
-(event t = 4.46; monthly t = 1.53).
-The full GBM underperforms the price. These differences do not establish
-consistent prospective forecast gains.
+Isotonic has the lowest pooled score in this comparison, a 1.00% reduction
+relative to the price. Its event-clustered t is 2.42, while the equal-month
+t is -0.32. Logistic reduces pooled error by 0.88% (event t = 4.46;
+monthly t = 1.53). The full GBM is 1.74% worse than the price in this
+comparison (event t = -2.59; monthly t = -3.73). These differences do not
+establish consistent prospective forecast gains.
 
-The split-sample GBM blend chooses weight 0.05 using
-5,501 early predictions whose closure-time proxies precede the
-2024-07 cutoff, then evaluates 49,405 later
-predictions from disjoint events. Its improvement has event t =
-4.93 and monthly t = 3.91.
-The full-sample blend curves are descriptive, not tuning evidence.
+The split-sample GBM blend chooses weight 0.10 using 5,501 early
+predictions whose closure-time proxies precede the 2024-07 cutoff, then
+evaluates 49,405 later predictions from disjoint events. It lowers the Brier
+score by 0.000307 (event t = 4.91; monthly t = 3.87), about
+half of the 0.000637 that logistic recalibration alone gains
+on the same later predictions. The full-sample blend curves are descriptive,
+not tuning evidence.
 
 ![Model comparison](figures/models/fig2_1_model_ladder.png)
 
 Error bars above are 1.96 times event-clustered standard errors. Equal-month
 inference answers a different question and is reported separately.
+
+In the closure-proxy robustness comparison (70,673 evaluated observations,
+27 test months and 7,039 event clusters), the price scores 0.0744532.
+Isotonic scores 0.0742677 (event t = 1.42; monthly t = -0.43),
+logistic 0.0743569 (1.46; -1.22) and the full GBM
+0.0740909 (0.95; 0.73). The GBM without text features has the
+lowest pooled score, 0.0730686, a 1.86% reduction relative to the price
+(event t = 3.82; monthly t = 1.28). Model rankings therefore depend on the date
+anchoring. This comparison is retrospective: its snapshots and horizon feature
+are measured back from a closure time that is not known in advance.
 
 ### Backtest design and limits
 
@@ -130,11 +197,11 @@ trade loses the full stake; some winning outcomes merely break even after costs.
 There is no compounding, capital budget, position cap or executable bid/ask model.
 Repeated horizons and related markets can represent overlapping positions.
 
-| Model disagreement threshold | Mean return after 1 cent | Event t | Monthly t |
-| --- | ---: | ---: | ---: |
-| 2 points | -5.10% | -3.21 | -1.81 |
-| 5 points | 1.62% | 0.81 | 0.26 |
-| 10 points | 7.53% | 2.20 | 0.81 |
+| Model disagreement threshold | Trades | Mean return after 1 cent | Event t | Monthly t |
+| --- | ---: | ---: | ---: | ---: |
+| 2 points | 24,694 | -5.39% | -3.35 | -1.97 |
+| 5 points | 13,391 | 1.89% | 0.93 | 0.29 |
+| 10 points | 6,234 | 7.98% | 2.36 | 0.94 |
 
 These are price-based signal tests, not evidence of achievable portfolio returns.
 Calibration backtests group monthly returns by closure-proxy month; model
@@ -201,8 +268,8 @@ python code/11_figures2.py
 ```
 
 `12` must precede `11`, which reads its supplementary comparisons. Each stage
-overwrites its generated outputs. The complete sequence was executed in a
-fresh isolated environment using the pinned dependencies on 1 October 2026.
+overwrites its generated outputs. The complete sequence was last executed on
+18 October 2026 with Python 3.11.7 and the pinned dependencies.
 Random seeds are 42; numeric results can vary between library builds and platforms.
 For efficient fitting, set `OPENBLAS_NUM_THREADS=1` and
 `VECLIB_MAXIMUM_THREADS=1` before starting Python; LightGBM itself uses four threads.

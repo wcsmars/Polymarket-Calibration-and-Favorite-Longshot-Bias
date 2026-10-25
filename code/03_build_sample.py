@@ -176,7 +176,8 @@ def main():
               "liquidityNum", "t_res", "t_created", "t_end", "yes_token",
               "event_id", "event_neg_risk", "negRisk"]].copy()
     out["y"] = out["y"].astype(int)
-    out = out.sort_values("volumeNum", ascending=False)  # fetch important markets first
+    # Fetch important markets first; id breaks volume ties so the order is reproducible.
+    out = out.sort_values(["volumeNum", "id"], ascending=[False, True], kind="stable")
     Path(OUT).parent.mkdir(parents=True, exist_ok=True)
     (ROOT / "results").mkdir(parents=True, exist_ok=True)
     out.to_csv(OUT, index=False)

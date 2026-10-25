@@ -43,6 +43,11 @@ def write_json(path, value):
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
+        # NamedTemporaryFile creates the file owner-only (0600); give the result
+        # the umask-governed mode that open() gives every other output.
+        mask = os.umask(0)
+        os.umask(mask)
+        os.chmod(temporary, 0o666 & ~mask)
         os.replace(temporary, path)
     finally:
         if temporary is not None and temporary.exists():

@@ -84,6 +84,8 @@ def main():
     d = df[df["anchor"] == "sched"].copy()
     d["t_res"] = pd.to_datetime(d["t_res"], utc=True)
     d = m09.eligible_snapshots(d)
+    # Same total row order as the walk-forward models (bagging samples by position).
+    d = d.sort_values(["snap_ts", "id", "h"], kind="stable").reset_index(drop=True)
     cat_dum = pd.get_dummies(d["cat"], prefix="cat")
     d = pd.concat([d, cat_dum], axis=1)
     cat_cols = list(cat_dum.columns)

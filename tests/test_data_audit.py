@@ -166,13 +166,50 @@ class CollectionRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             out, checkpoint = root / "metadata.jsonl", root / "checkpoint.json"
-            checkpoint.write_text('["2025-01-01|2025-02-01"]')
+            # The extra stale key shows that the checkpoint is rewritten, not left in place.
+            checkpoint.write_text('["2024-12-01|2025-01-01", "2025-01-01|2025-02-01"]')
             with patch.object(metadata, "OUT", str(out)), patch.object(metadata, "CHECKPOINT", str(checkpoint)), \
                     patch.object(metadata, "month_windows", return_value=[("2025-01-01", "2025-02-01")]), \
                     patch.object(metadata, "get", return_value=[{"id": 123}]) as get, patch("builtins.print"):
                 metadata.main()
             get.assert_called_once()
             self.assertEqual(list(data_io.read_jsonl(out))[0]["id"], "123")
+            self.assertEqual(json.loads(checkpoint.read_text()), ["2025-01-01|2025-02-01"])
+
+    def test_metadata_resume_skips_completed_windows_and_extends_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            out, checkpoint = root / "metadata.jsonl", root / "checkpoint.json"
+            write_jsonl(out, [{"id": "1"}])
+            checkpoint.write_text('["2025-01-01|2025-02-01"]')
+            windows = [("2025-01-01", "2025-02-01"), ("2025-02-01", "2025-03-01")]
+            with patch.object(metadata, "OUT", str(out)), patch.object(metadata, "CHECKPOINT", str(checkpoint)), \
+                    patch.object(metadata, "month_windows", return_value=windows), \
+                    patch.object(metadata, "get", return_value=[{"id": 2}]) as get, patch("builtins.print"):
+                metadata.main()
+            get.assert_called_once()
+            self.assertEqual(get.call_args.args[0]["end_date_min"], "2025-02-01T00:00:00Z")
+            self.assertEqual([row["id"] for row in data_io.read_jsonl(out)], ["1", "2"])
+            self.assertEqual(json.loads(checkpoint.read_text()),
+                             ["2025-01-01|2025-02-01", "2025-02-01|2025-03-01"])
+            self.assertFalse(checkpoint.with_name(checkpoint.name + ".tmp").exists())
+
+    def test_failed_checkpoint_replace_keeps_the_previous_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            out, checkpoint = root / "metadata.jsonl", root / "checkpoint.json"
+            write_jsonl(out, [{"id": "1"}])
+            checkpoint.write_text('["2025-01-01|2025-02-01"]')
+            windows = [("2025-01-01", "2025-02-01"), ("2025-02-01", "2025-03-01")]
+            with patch.object(metadata, "OUT", str(out)), patch.object(metadata, "CHECKPOINT", str(checkpoint)), \
+                    patch.object(metadata, "month_windows", return_value=windows), \
+                    patch.object(metadata, "get", return_value=[{"id": 2}]), \
+                    patch.object(metadata.os, "replace", side_effect=OSError("simulated")), patch("builtins.print"):
+                with self.assertRaises(OSError):
+                    metadata.main()
+            # The window's markets were saved; only the checkpoint update failed,
+            # and an interrupted write must leave the last complete checkpoint in place.
+            self.assertEqual([row["id"] for row in data_io.read_jsonl(out)], ["1", "2"])
             self.assertEqual(json.loads(checkpoint.read_text()), ["2025-01-01|2025-02-01"])
 
 
@@ -223,6 +260,24 @@ class ConstructionRegressionTests(unittest.TestCase):
             self.assertEqual(counts["binary_yes_no"], 6)
             self.assertEqual(counts["clean_resolution"], 2)
 
+    def test_sample_order_breaks_volume_ties_by_id_whatever_the_input_order(self):
+        base = {"closed": True, "outcomes": ["Yes", "No"], "outcomePrices": [1, 0],
+                "clobTokenIds": ["yes", "no"], "enableOrderBook": True,
+                "closedTime": "2025-02-01T00:00:00Z", "createdAt": "2025-01-01T00:00:00Z",
+                "endDate": "2025-02-01T00:00:00Z", "umaResolutionStatus": "resolved"}
+        ids = [f"m{i:02d}" for i in range(40)]
+        # Five high-volume markets, then 35 tied ones: ties are ordered by id.
+        records = [{**base, "id": ids[i], "volumeNum": 5000 if i < 5 else 2000}
+                   for i in np.random.default_rng(0).permutation(len(ids))]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw, out = root / "raw.jsonl", root / "processed" / "sample.csv"
+            write_jsonl(raw, records)
+            with patch.object(sample, "RAW", str(raw)), patch.object(sample, "OUT", str(out)), \
+                    patch.object(sample, "ROOT", root), patch("builtins.print"):
+                sample.main()
+            self.assertEqual(pd.read_csv(out, dtype={"id": str}).id.tolist(), ids)
+
     def test_snapshots_exclude_postclosure_and_precreation_quotes_and_future_siblings(self):
         base = pd.Timestamp("2025-01-01T00:00:00Z")
         def date(days):
@@ -234,8 +289,11 @@ class ConstructionRegressionTests(unittest.TestCase):
                          "question": "Will this occur?", "volumeNum": 1000,
                          "t_created": date(created), "t_res": date(closed), "t_end": date(end)})
         histories = []
-        for identifier, start in [("a", -1), ("b", 9)]:
-            history = [[date(day).timestamp(), .3 + day * .01] for day in range(start, 14)]
+        # b is quoted before its creation (days 7 to 9) and has no day-10 quote, so
+        # at tau=10 the latest fresh quote (day 9) predates creation (day 9.5).
+        for identifier, start in [("a", -1), ("b", 7)]:
+            history = [[date(day).timestamp(), .3 + day * .01] for day in range(start, 14)
+                       if not (identifier == "b" and day == 10)]
             histories.append({"id": identifier, "n": len(history), "history": history})
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -251,6 +309,11 @@ class ConstructionRegressionTests(unittest.TestCase):
             market = pd.read_csv(processed / "market_level.csv").set_index("id")
             self.assertTrue(pd.isna(market.at["a", "p_sched_1"]))  # tau=11, close=10
             self.assertTrue(pd.isna(market.at["b", "p_sched_5"]))  # tau=8, created=9.5
+            self.assertTrue(pd.isna(market.at["b", "p_sched_3"]))  # tau=10, quote day 9 < created
+            self.assertAlmostEqual(market.at["b", "p_sched_1"], .42)  # tau=12, quote day 12
+            snapshots = pd.read_csv(processed / "panel.csv", dtype={"id": str})
+            self.assertEqual(snapshots.loc[snapshots.id == "b", "h"].tolist(), [1])
+            self.assertEqual(sorted(snapshots.loc[snapshots.id == "a", "h"]), [1, 3, 5])
             dataset = pd.read_parquet(processed / "ml_dataset.parquet")
             for row in dataset.itertuples():
                 original = next(r for r in rows if r["id"] == row.id)

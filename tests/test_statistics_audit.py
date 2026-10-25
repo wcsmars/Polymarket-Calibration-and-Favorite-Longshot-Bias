@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -103,6 +104,46 @@ class CalibrationAuditTests(unittest.TestCase):
         self.assertAlmostEqual(actual["brier"], actual["brier_binned"] + actual["binning_residual"])
         self.assertNotAlmostEqual(actual["binning_residual"], 0)
 
+    def test_prices_on_bin_edges_fall_in_the_bin_they_open(self):
+        # Bins are [k/20, (k+1)/20). Edges from np.linspace sit one ULP above seven
+        # of these ticks (0.15, 0.30, 0.35, 0.60, 0.70, 0.85, 0.95), one bin too low.
+        ticks = [round(k / 20, 2) for k in range(1, 20)]
+        frame = pd.DataFrame({"p": ticks, "y": [0, 1] * 9 + [0],
+                              "event_id": [str(k) for k in range(19)]})
+        bins = analysis.calib_bins(frame, nbins=20, boot=10)
+        self.assertEqual(bins["n"].tolist(), [0] + [1] * 19)
+        self.assertEqual(bins.loc[[3, 6, 19], "p_mean"].tolist(), [0.15, 0.30, 0.95])
+        # With one price per bin, binned reliability is the raw Brier score.
+        actual = analysis.scores(frame, nbins=20)
+        self.assertAlmostEqual(actual["reliability"], actual["brier"])
+        self.assertAlmostEqual(actual["binning_residual"], 0)
+
+    def test_one_market_per_event_breaks_volume_ties_by_id_whatever_the_input_order(self):
+        rng = np.random.default_rng(1)
+        rows = []
+        for event in range(30):
+            # Both markets of an event tie for top volume; the larger id comes first.
+            for suffix, y in [("b", event % 2), ("a", 1 - event % 2)]:
+                rows.append({"id": f"{event:02d}{suffix}", "event_id": f"e{event:02d}", "h": 7,
+                             "p": rng.uniform(.05, .95), "y": y, "volumeNum": 1000 * (1 + event % 7),
+                             "cat": "other", "era": "2024", "event_neg_risk": False, "negRisk": False,
+                             "t_res": "2024-06-01T00:00:00Z"})
+        panel = pd.DataFrame(rows)
+        market = panel[["id", "event_id", "y", "t_res"]].assign(
+            p_mid=np.nan, **{f"p_sched_{h}": np.nan for h in analysis.HORIZONS})
+        with tempfile.TemporaryDirectory() as tmp, patch.object(analysis, "ROOT", Path(tmp)), \
+                patch("builtins.print"):
+            processed = Path(tmp) / "data" / "processed"
+            processed.mkdir(parents=True)
+            panel.to_csv(processed / "panel.csv", index=False)
+            market.to_csv(processed / "market_level.csv", index=False)
+            analysis.main()
+            result = json.loads((Path(tmp) / "results/analysis.json").read_text(encoding="utf-8"))
+        kept = panel[panel["id"].str.endswith("a")]
+        self.assertEqual(result["robustness"]["one_per_event"]["n"], 30)
+        self.assertAlmostEqual(result["robustness"]["one_per_event"]["brier"],
+                               float(np.mean((kept["p"] - kept["y"]) ** 2)))
+
     def test_endpoint_favorite_is_counted_and_zero_price_is_not_a_trade(self):
         frame = pd.DataFrame({"p": [0.0, 1.0], "y": [0, 1], "event_id": ["a", "b"],
                               "t_res": pd.to_datetime(["2025-01-01", "2025-01-02"], utc=True)})
@@ -168,7 +209,9 @@ class PresentationAuditTests(unittest.TestCase):
             (root / "results/analysis.json").write_text(json.dumps(archived))
             result = subprocess.run([sys.executable, str(root / "code/07_tables.py")], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("—", (root / "results/tables.md").read_text())
+            tables = (root / "results/tables.md").read_text(encoding="utf-8")
+            # A missing t value renders as a placeholder cell; the footer also has an em dash.
+            self.assertIn("(—)", tables)
 
 
 if __name__ == "__main__":

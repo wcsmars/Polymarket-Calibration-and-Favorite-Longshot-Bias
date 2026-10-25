@@ -1,5 +1,5 @@
 # Python 3.11 reproduction environment for the full research pipeline.
-# The original complete environment was not archived; see README.md.
+# Exact versions used for the released results; see "Data and full reproduction" in README.md.
 numpy==1.26.4
 pandas==2.3.0
 scipy==1.17.1

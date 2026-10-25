@@ -67,14 +67,16 @@ grid = np.linspace(0.01, 0.99, 197)
 lgrid = np.log(grid / (1 - grid))
 fig, axes = plt.subplots(1, 2, figsize=(9, 4.2), sharey=True)
 axes[0].plot([0, 1], [0, 1], color=GRAY, ls="--", lw=1, label="no correction")
-for h, col in [(1, BLUE), (7, GREEN), (30, "#d97706"), (90, RED)]:
+# The 30- and 90-day curves nearly coincide: wide 30-day line underneath, dashed 90-day on top.
+for h, col, ls, lw, z in [(1, BLUE, "-", 1.5, 3), (7, GREEN, "-", 1.5, 3),
+                          (30, "#d97706", "-", 3.0, 2), (90, RED, "--", 1.3, 4)]:
     sub = tr[tr["h"] == h]
     if sub["y"].nunique() < 2:
         continue
     lr = LogisticRegression(C=1e6, max_iter=1000)
     lr.fit(sub[["logit_p"]], sub["y"])
     axes[0].plot(grid, lr.predict_proba(pd.DataFrame({"logit_p": lgrid}))[:, 1], color=col,
-                 lw=1.5, label=f"h = {h}d")
+                 ls=ls, lw=lw, zorder=z, label=f"h = {h}d")
 axes[0].set_xlabel("Market price p"); axes[0].set_ylabel("Recalibrated probability")
 axes[0].set_title("Logistic recalibration, by horizon")
 axes[0].legend(frameon=False, fontsize=8)
@@ -137,7 +139,7 @@ plt.close(fig)
 
 # ---- Tables ----
 out = []
-out.append("## Table 2. Out-of-sample forecast comparison, schedule-anchored\n")
+out.append("## Table 1. Out-of-sample forecast comparison, schedule-anchored\n")
 out.append(f"Test rows: {fmt(sched['n'], ',')} ({fmt(sched['n_events'], ',')} events, "
            f"{sched['n_months']} months; {fmt(sched['n_excluded_event_overlap'], ',')} rows "
            f"excluded for event overlap). Price Brier = {fmt(sched['brier_price'], '.5f')}, "
@@ -151,7 +153,7 @@ for mname, lab in zip(models, ["Isotonic (price)", "Logistic logit(p)", "GBM (p,
                f"{fmt(1e4*number(v['delta_brier_vs_price']), '+.2f')} | {fmt(v['dm_event']['t'], '.2f')} | "
                f"{fmt(v['dm_monthly']['t'], '.2f')} |")
 
-out.append("\n## Table 3. By horizon (GBM full vs price, schedule-anchored)\n")
+out.append("\n## Table 2. By horizon (GBM full vs price, schedule-anchored)\n")
 out.append("| h | n | Brier price | Brier GBM | Δ (×10⁻⁴) | DM t (event) |")
 out.append("|---|---|---|---|---|---|")
 for h, v in sorted(sched["by_horizon"].items(), key=lambda kv: int(kv[0])):
@@ -159,7 +161,7 @@ for h, v in sorted(sched["by_horizon"].items(), key=lambda kv: int(kv[0])):
                f"{fmt(1e4*(v['brier_price']-v['brier_gbm_full']), '+.2f')} | {fmt(v['dm_t'], '.2f')} |")
 
 res = M["res"]
-out.append("\n## Table 4. Closure-proxy-anchored robustness\n")
+out.append("\n## Table 3. Closure-proxy-anchored robustness\n")
 out.append(f"Test rows: {fmt(res['n'], ',')}; price Brier = {fmt(res['brier_price'], '.5f')}.\n")
 out.append("| Model | Brier | ΔBrier (×10⁻⁴) | t (event) | t (monthly) |")
 out.append("|---|---|---|---|---|")
@@ -168,14 +170,14 @@ for mname in models:
     out.append(f"| {mname} | {fmt(v['brier'], '.5f')} | {fmt(1e4*number(v['delta_brier_vs_price']), '+.2f')} | "
                f"{fmt(v['dm_event']['t'], '.2f')} | {fmt(v['dm_monthly']['t'], '.2f')} |")
 
-out.append("\n## Table 5. Where the model wins (ΔBrier vs price, ×10⁻⁴)\n")
+out.append("\n## Table 4. Where the model wins (ΔBrier vs price, ×10⁻⁴)\n")
 out.append("| Split | Group | n | Δ | t |")
 out.append("|---|---|---|---|---|")
 for split, groups in I["where"].items():
     for g, v in groups.items():
         out.append(f"| {split} | {g} | {fmt(v['n'], ',')} | {fmt(1e4*number(v['delta_brier']), '+.2f')} | {fmt(v['t'], '.2f')} |")
 
-out.append("\n## Table 6. Divergence-threshold price-based returns (schedule-anchored, held-out)\n")
+out.append("\n## Table 5. Divergence-threshold price-based returns (schedule-anchored, held-out)\n")
 out.append("One dollar per forecast row, including repeated horizons for a market. Monthly averages use snapshot months; this is not a capital-constrained portfolio or an executable trading simulation.\n")
 out.append("| θ | Cost | Trades | Mean ret | t (event) | Monthly mean | t (monthly) | Win |")
 out.append("|---|---|---|---|---|---|---|---|")
@@ -190,7 +192,7 @@ for theta in ["0.02", "0.05", "0.1"]:
                    f"{fmt(v['monthly_t'], '.2f')} | {fmt(100*number(v['win_rate']), '.1f')}% |")
 
 S = json.load(open(f"{ROOT}/results/models/supplement.json"))["sched"]
-out.append(f"\n## Table 7. Second-half folds (test months ≥ {S['mature_cutoff_month']}) and split-sample blends\n")
+out.append(f"\n## Table 6. Second-half folds (test months ≥ {S['mature_cutoff_month']}) and split-sample blends\n")
 out.append("Blend weights use earlier snapshots with closure proxies before the split; evaluation excludes tuning events.\n")
 out.append("| Specification | ΔBrier vs price (×10⁻⁴) | t (event) | t (monthly) |")
 out.append("|---|---|---|---|")
@@ -204,7 +206,7 @@ for m, lab in [("logit_honest", "Blend price/logistic (λ* from eligible first-h
     out.append(f"| {lab}, λ*={fmt(v['lambda_star'], '.2f')} | {fmt(1e4*number(v['delta_brier']), '+.2f')} | "
                f"{fmt(v['t_event'], '.2f')} | {fmt(v['t_monthly'], '.2f')} |")
 
-out.append("\n## Table 8. Recalibration gains by horizon (schedule-anchored, ΔBrier ×10⁻⁴)\n")
+out.append("\n## Table 7. Recalibration gains by horizon (schedule-anchored, ΔBrier ×10⁻⁴)\n")
 out.append("| h | n | Isotonic (t) | Logistic (t) | GBM full (t) |")
 out.append("|---|---|---|---|---|")
 for h, v in sorted(S["by_horizon"].items(), key=lambda kv: int(kv[0])):

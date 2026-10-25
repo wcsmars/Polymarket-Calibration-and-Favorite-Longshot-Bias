@@ -64,7 +64,10 @@ def es_split(ttr, gtr, frac=0.15):
     ev = pd.DataFrame({"t": np.asarray(ttr), "g": np.asarray(gtr)})
     if ev.isna().any().any() or ev["g"].nunique() < 2:
         raise ValueError("Early stopping needs at least two nonmissing event groups and times.")
-    last = ev.groupby("g")["t"].max().sort_values(ascending=False)
+    # Most recent events first; the event key breaks time ties deterministically.
+    last = (ev.groupby("g")["t"].max().reset_index()
+            .sort_values(["t", "g"], ascending=[False, True], kind="stable")
+            .set_index("g")["t"])
     sizes = ev.groupby("g").size()
     target = int(len(ev) * frac)
     va_events, acc = [], 0
@@ -166,7 +169,10 @@ def run_anchor(df, anchor):
     source = df[df["anchor"] == anchor].copy()
     d = eligible_snapshots(source)
     n_ineligible = len(source) - len(d)
-    d = d.sort_values("snap_ts").reset_index(drop=True)
+    # A total, stable row order: LightGBM bagging samples by row position, so tied
+    # snapshot times must not leave a fold's rows in an arbitrary order that shifts
+    # when later months are added.
+    d = d.sort_values(["snap_ts", "id", "h"], kind="stable").reset_index(drop=True)
     d["t_res"] = pd.to_datetime(d["t_res"], utc=True)
     d["snap_month"] = pd.to_datetime(d["snap_ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     if d.duplicated(["id", "h"]).any():

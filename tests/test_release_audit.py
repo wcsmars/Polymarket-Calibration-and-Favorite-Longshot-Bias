@@ -1,6 +1,7 @@
 """Check isolated sample-run validation and portable sample generation."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -66,6 +67,19 @@ class ResultWritingTests(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"), '{"saved": true}')
             self.assertEqual(list(Path(tmp).iterdir()), [path])
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_result_file_mode_follows_the_umask_like_other_outputs(self):
+        # NamedTemporaryFile alone would leave every result owner-only (0600).
+        for mask, mode in [(0o022, 0o644), (0o027, 0o640)]:
+            with self.subTest(umask=oct(mask)), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "results.json"
+                previous = os.umask(mask)
+                try:
+                    data_io.write_json(path, {"saved": True})
+                finally:
+                    os.umask(previous)
+                self.assertEqual(path.stat().st_mode & 0o777, mode)
+
     def test_calibration_tables_render_null_regressions(self):
         results = json.loads((ROOT / "results/analysis.json").read_text(encoding="utf-8"))
         for horizon in results["horizon"].values():
@@ -76,11 +90,14 @@ class ResultWritingTests(unittest.TestCase):
             (root / "code").mkdir()
             shutil.copyfile(ROOT / "code/07_tables.py", root / "code/07_tables.py")
             data_io.write_json(root / "results/analysis.json", results)
+            # The child prints in the console encoding (cp1252 on many Windows
+            # machines); its output is only an error message, so decode leniently.
             result = subprocess.run([sys.executable, str(root / "code/07_tables.py")],
-                                    capture_output=True, encoding="utf-8")
+                                    capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             tables = (root / "results/tables.md").read_text(encoding="utf-8")
-            self.assertIn("—", tables)
+            # Every regression cell is a placeholder; the footer alone also has an em dash.
+            self.assertIn("| — (—) | — (—) | — | — (—) | — (—) | — | — |", tables)
             self.assertNotIn("nan", tables)
 
 

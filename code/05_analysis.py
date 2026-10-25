@@ -71,7 +71,8 @@ def calib_bins(df, nbins=NBINS, boot=BOOT, seed=SEED):
     if df["event_id"].isna().any():
         raise ValueError("event_id must be nonmissing for clustered inference")
     rng = np.random.default_rng(seed)
-    edges = np.linspace(0, 1, nbins + 1)
+    # Exact k/nbins edges, so a price on a tick always opens its bin [k/n, (k+1)/n).
+    edges = np.arange(nbins + 1) / nbins
     b = np.clip(np.digitize(df["p"], edges) - 1, 0, nbins - 1)
     df = df.assign(bin=b)
     # per-event sufficient statistics: counts and y-sums per bin
@@ -129,7 +130,7 @@ def scores(df, nbins=NBINS):
     bs = float(np.mean((p - y) ** 2))
     ybar = float(y.mean())
     unc = ybar * (1 - ybar)
-    edges = np.linspace(0, 1, nbins + 1)
+    edges = np.arange(nbins + 1) / nbins  # exact ticks, as in calib_bins
     b = np.clip(np.digitize(p, edges) - 1, 0, nbins - 1)
     g = pd.DataFrame({"b": b, "p": p, "y": y}).groupby("b").agg(
         n=("y", "size"), pbar=("p", "mean"), ybar=("y", "mean"))
@@ -374,7 +375,8 @@ def main():
 
     # ---- robustness at h=7 ----
     rob = {}
-    dedup = df7.sort_values("volumeNum", ascending=False).drop_duplicates("event_id")
+    dedup = (df7.sort_values(["volumeNum", "id"], ascending=[False, True], kind="stable")
+             .drop_duplicates("event_id"))
     rob["one_per_event"] = {**mz_regressions(dedup)["logodds"], "n": len(dedup),
                             "brier": scores(dedup)["brier"]}
     nocd = df7[df7["cat"] != "crypto_daily"]
