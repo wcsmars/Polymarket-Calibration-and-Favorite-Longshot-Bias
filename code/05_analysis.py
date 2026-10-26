@@ -106,10 +106,13 @@ def calib_bins(df, nbins=NBINS, boot=BOOT, seed=SEED):
                                        out=np.full(nbins, np.nan), where=nn > 0)
     bounds = np.full((4, nbins), np.nan)
     # Empty bins have no estimable interval; avoid all-NaN percentile warnings.
-    occupied = n_k > 0
-    if E > 1:
-        bounds[:2, occupied] = np.nanpercentile(boots[:, occupied], [2.5, 97.5], axis=0)
-        bounds[2:, occupied] = np.nanpercentile(error_boots[:, occupied], [2.5, 97.5], axis=0)
+    # A bin supported by one event has no estimable between-event uncertainty.
+    # Other events elsewhere in the sample do not supply independent evidence
+    # for that bin: dropping empty bootstrap draws would give a false zero-width CI.
+    estimable = (N_mat > 0).sum(axis=0) > 1
+    if estimable.any():
+        bounds[:2, estimable] = np.nanpercentile(boots[:, estimable], [2.5, 97.5], axis=0)
+        bounds[2:, estimable] = np.nanpercentile(error_boots[:, estimable], [2.5, 97.5], axis=0)
     lo, hi, err_lo, err_hi = bounds
     return pd.DataFrame({
         "bin": range(nbins), "n": n_k.astype(int), "p_mean": p_mean,

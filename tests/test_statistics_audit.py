@@ -74,6 +74,15 @@ class CalibrationAuditTests(unittest.TestCase):
         self.assertEqual((mean, n, events), (0.25, 2, 1))
         self.assertTrue(np.isnan(se))
 
+    def test_single_event_bin_has_no_interval_even_when_other_bins_have_many_events(self):
+        frame = pd.DataFrame({"p": [.1, .1, .9, .9], "y": [0, 1, 0, 1],
+                              "event_id": ["only-low", "only-low", "high-a", "high-b"]})
+        result = analysis.calib_bins(frame, nbins=2, boot=100)
+        intervals = ["ci_lo", "ci_hi", "error_ci_lo", "error_ci_hi"]
+        self.assertTrue(result.loc[0, intervals].isna().all())
+        self.assertTrue(result.loc[1, intervals].notna().all())
+        self.assertEqual(result.loc[0, "y_freq"], .5)
+
     def test_quantile_groups_keep_equal_values_together(self):
         constant = analysis.quantile_groups(pd.Series([1.0] * 10))
         self.assertEqual(set(constant), {"mid"})

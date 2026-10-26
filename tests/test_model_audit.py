@@ -79,6 +79,15 @@ class ModelTimingTests(unittest.TestCase):
         self.assertEqual(frame[cols].shape, (30, model.N_SVD))
         self.assertTrue((frame[cols].values == 0).all())
 
+    def test_category_encoder_uses_only_training_vocabulary(self):
+        train = pd.DataFrame({"cat": ["sports", "crypto"]}, index=[9, 2])
+        test = pd.DataFrame({"cat": ["future-category", "sports"]}, index=[6, 1])
+        encoded, cols = model.add_category_features(test, train)
+        self.assertEqual(cols, ["cat_crypto", "cat_sports"])
+        self.assertEqual(encoded.index.tolist(), [6, 1])
+        self.assertFalse(encoded.loc[6, cols].any())
+        self.assertTrue(encoded.loc[1, "cat_sports"])
+
     def test_selected_tree_count_is_refit_on_every_training_row(self):
         selected, final = MagicMock(), MagicMock()
         selected.best_iteration_ = 7
@@ -108,6 +117,26 @@ class ModelTimingTests(unittest.TestCase):
         self.assertIs(cls.return_value.fit.call_args.args[0], X)
         self.assertNotIn("eval_set", cls.return_value.fit.call_args.kwargs)
 
+    def test_single_event_training_uses_fixed_budget_without_splitting_event(self):
+        X = pd.DataFrame({"p": [.1, .2, .8, .9]})
+        y = pd.Series([0, 0, 1, 1])
+        with patch.object(model.lgb, "LGBMClassifier") as cls:
+            model.fit_gbm_model(X, y, np.arange(4), ["one"] * 4)
+        cls.assert_called_once_with(**model.LGB_PARAMS)
+        self.assertIs(cls.return_value.fit.call_args.args[0], X)
+        self.assertNotIn("eval_set", cls.return_value.fit.call_args.kwargs)
+
+    def test_training_rejects_missing_groups_even_with_constant_outcomes(self):
+        with self.assertRaisesRegex(ValueError, "nonmissing"):
+            model.fit_gbm_model(pd.DataFrame({"p": [.1, .2]}), pd.Series([0, 0]),
+                                np.arange(2), ["one", None])
+
+    def test_single_event_loss_comparison_has_undefined_uncertainty(self):
+        mean, se, t = model.dm_clustered([.1, .4], [.2, .2], ["one", "one"])
+        self.assertAlmostEqual(mean, .05)
+        self.assertTrue(np.isnan(se))
+        self.assertTrue(np.isnan(t))
+
 
 class WalkForwardTests(unittest.TestCase):
     def predictions(self, frame):
@@ -130,6 +159,16 @@ class WalkForwardTests(unittest.TestCase):
         pd.testing.assert_frame_equal(alone, full[full["snap_month"] == first], check_exact=True)
         shuffled = self.predictions(frame.sample(frac=1, random_state=7))
         pd.testing.assert_frame_equal(shuffled, full, check_exact=True)
+
+    def test_fold_predictions_ignore_categories_first_seen_in_later_months(self):
+        frame = walk_forward_frame()
+        full = self.predictions(frame)
+        first = full["snap_month"].min()
+        later = pd.Timestamp(first + "-01", tz="UTC") + pd.DateOffset(months=1)
+        frame.loc[frame["snap_ts"] >= later.timestamp(), "cat"] = "future-category"
+        altered = self.predictions(frame)
+        pd.testing.assert_frame_equal(full[full["snap_month"] == first],
+                                      altered[altered["snap_month"] == first], check_exact=True)
 
 
 

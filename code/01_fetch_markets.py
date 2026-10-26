@@ -1,4 +1,4 @@
-"""Fetch metadata for all resolved Polymarket markets via the Gamma API.
+"""Fetch closed-market metadata from the Polymarket Gamma API.
 
 API offset limits can change, so we paginate by endDate windows
 (end_date_min / end_date_max), recursively splitting any window that
@@ -183,7 +183,7 @@ def main():
             os.replace(temporary, checkpoint)
             if n:
                 print(f"window {d1}..{d2}: +{n} (total {total})", flush=True)
-    print(f"DONE: {total} unique resolved markets in {OUT}", flush=True)
+    print(f"DONE: {total} unique closed markets in {OUT}", flush=True)
 
 
 if __name__ == "__main__":

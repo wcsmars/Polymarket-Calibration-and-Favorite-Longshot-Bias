@@ -167,7 +167,13 @@ def normalize_history(history, *, strict=True):
 
 
 def load_histories(path):
-    """Read saved successes; later failed attempts never erase a valid history."""
+    """Read saved successes; reject conflicting snapshots of the same market.
+
+    Identical normalized duplicates are harmless. A different successful
+    history needs an explicit choice of research snapshot, rather than making
+    downstream estimates depend on file order. Failed retries never erase a
+    valid history.
+    """
     histories = {}
     for record in read_jsonl(path):
         identifier = market_id(record.get("id"))
@@ -181,7 +187,10 @@ def load_histories(path):
                 raise ValueError(f"Failed history contains quotes for {identifier}")
             continue
         try:
-            histories[identifier] = normalize_history(history, strict=False)
+            normalized = normalize_history(history, strict=False)
         except ValueError as error:
             raise ValueError(f"Invalid history for market {identifier}: {error}") from error
+        if identifier in histories and not np.array_equal(histories[identifier], normalized):
+            raise ValueError(f"Conflicting successful histories for market {identifier}")
+        histories[identifier] = normalized
     return histories

@@ -111,7 +111,8 @@ def main():
     counts["binary_yes_no"] = len(df)
 
     def clean_outcome(pl):
-        if not isinstance(pl, list) or len(pl) != 2:
+        if (not isinstance(pl, list) or len(pl) != 2
+                or any(isinstance(price, bool) for price in pl)):
             return None
         try:
             a, b = float(pl[0]), float(pl[1])
@@ -138,7 +139,7 @@ def main():
     has_tok = df["tokens_l"].map(lambda x: isinstance(x, list) and len(x) == 2
                                 and all(isinstance(t, (str, int)) and not isinstance(t, bool)
                                         and str(t).strip() for t in x)
-                                and str(x[0]) != str(x[1]))
+                                and str(x[0]).strip() != str(x[1]).strip())
     enabled = df["enableOrderBook"].map(lambda value: parse_flag(value, None) is not False)
     df = df[has_tok & enabled].copy()
     counts["clob_market"] = len(df)

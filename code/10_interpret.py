@@ -86,11 +86,9 @@ def main():
     d = m09.eligible_snapshots(d)
     # Same total row order as the walk-forward models (bagging samples by position).
     d = d.sort_values(["snap_ts", "id", "h"], kind="stable").reset_index(drop=True)
-    cat_dum = pd.get_dummies(d["cat"], prefix="cat")
-    d = pd.concat([d, cat_dum], axis=1)
-    cat_cols = list(cat_dum.columns)
     months = sorted(d["snap_month"].unique())
     cut = pd.Timestamp("2025-01-01", tz="UTC")
+    d, cat_cols = m09.add_category_features(d, d[m09.training_eligible(d, cut)])
     if len(months) <= m09.BURN_IN_MONTHS:
         raise ValueError("interpretation requires more months than the model burn-in")
     burn_cut = min(pd.Timestamp(months[m09.BURN_IN_MONTHS] + "-01", tz="UTC"), cut)

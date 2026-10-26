@@ -119,8 +119,8 @@ for hk, v in sorted(r.get("schedule_anchored", {}).items(), key=lambda x: int(x[
 bs = r.get("backtest_sched_h30")
 if bs:
     out.append("\n**Schedule-anchored backtest (h = 30):** ")
-    out.append("\nRetrospective price-based returns: scheduled anchors can fall after the "
-               "historically recorded schedule, and the fixed 1¢ cost does not model executable "
+    out.append("\nRetrospective price-based returns: scheduled dates were collected retrospectively, "
+               "and the fixed 1¢ cost does not model executable "
                "quotes, depth, or fills. See the README limitations.\n")
     for k in ["buy_favorites_yes", "fade_longshots_buy_no"]:
         g, n = bs["gross"].get(k), bs["net_1c"].get(k)

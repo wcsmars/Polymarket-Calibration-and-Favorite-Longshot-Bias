@@ -128,14 +128,16 @@ def main():
                     "event_n_markets": int(np.searchsorted(
                         event_available[r.event_id], tau, side="right")),
                     "snap_ts": tau,
-                    "frac_life": feats["days_live"] / static["sched_life_days"]
+                    # The numerator and denominator share the creation-time
+                    # origin; the first quote can arrive well after listing.
+                    "frac_life": ((tau - t_created) / DAY) / static["sched_life_days"]
                     if np.isfinite(static["sched_life_days"]) else np.nan,
                 })
 
     if not rows:
         raise ValueError("No usable forecast snapshots; inspect sample dates and price histories")
     df = pd.DataFrame(rows)
-    df["snap_month"] = pd.to_datetime(df["snap_ts"], unit="s", utc=True).dt.to_period("M").astype(str)
+    df["snap_month"] = pd.to_datetime(df["snap_ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     df["logit_p"] = np.log(df["p"] / (1 - df["p"]))
     df.to_parquet(f"{ROOT}/data/processed/ml_dataset.parquet", index=False)
     print(f"rows: {len(df)}")

@@ -50,12 +50,12 @@ stages, so a stage can be rerun on its own once its inputs exist.
 
 ## Results
 
-The included results were regenerated on **18 October 2026**. Relative to the
-first saved estimates, the pipeline now enforces forecast timing and event-size
-availability, pools tied prices in the calibration decomposition, tunes blends
-only on earlier data, places prices that sit exactly on a bin edge in the bin
-that edge opens, and gives the model stages a total row order, so each
-walk-forward fold depends only on data available before its test month.
+The included results were regenerated on **27 October 2026**. The pipeline
+enforces forecast timing and event-size availability, pools tied prices in the
+calibration decomposition, tunes blends only on earlier data, uses exact price-bin
+edges, and gives model stages a total row order. This rerun also measures elapsed
+lifetime from market creation and defines category columns from each fold's
+eligible training rows. Retrospective metadata and sample-selection limits remain.
 
 Sample construction starts from 72,578 closed-market metadata records and
 applies its filters in sequence: 44,388 are binary YES/NO markets;
@@ -101,7 +101,9 @@ pools tied prices before isotonic fitting; its identity is
 ![Calibration by forecast horizon](figures/calibration/fig1_calibration_by_horizon.png)
 
 Calibration-error intervals resample entire events and recompute both mean
-outcomes and mean prices. Closure dates are proxies, as explained below.
+outcomes and mean prices. Bins supported by only one event retain their point
+estimates but have no reported uncertainty interval. Closure dates are proxies,
+as explained below.
 
 ### Price biases and bias strategies
 
@@ -138,7 +140,8 @@ Both t statistics refer to the return after 1 cent. Only the 30-day
 closure-proxy NO strategy keeps an event t above 2 after costs (3.04), and it
 weakens to 1.74 when quotes are anchored to scheduled end dates. Weighting months
 equally, no strategy's monthly t exceeds 1.66. The biases are statistically
-clear but are not reliably tradable after a 1-cent cost.
+clear, but these estimates do not establish a reliable tradable edge after a
+1-cent cost.
 
 ### Forecast models
 
@@ -151,22 +154,22 @@ market–horizon observations, not distinct markets. Lower Brier scores are bett
 | Market price | 0.0785305 |
 | Isotonic recalibration | 0.0777421 |
 | Logistic recalibration | 0.0778376 |
-| Full LightGBM | 0.0798941 |
+| Full LightGBM | 0.0798653 |
 
 Isotonic has the lowest pooled score in this comparison, a 1.00% reduction
 relative to the price. Its event-clustered t is 2.42, while the equal-month
 t is -0.32. Logistic reduces pooled error by 0.88% (event t = 4.46;
-monthly t = 1.53). The full GBM is 1.74% worse than the price in this
-comparison (event t = -2.59; monthly t = -3.73). These differences do not
+monthly t = 1.53). The full GBM is 1.70% worse than the price in this
+comparison (event t = -2.65; monthly t = -3.71). These differences do not
 establish consistent prospective forecast gains.
 
 The split-sample GBM blend chooses weight 0.10 using 5,501 early
 predictions whose closure-time proxies precede the 2024-07 cutoff, then
 evaluates 49,405 later predictions from disjoint events. It lowers the Brier
-score by 0.000307 (event t = 4.91; monthly t = 3.87), about
-half of the 0.000637 that logistic recalibration alone gains
-on the same later predictions. The full-sample blend curves are descriptive,
-not tuning evidence.
+score by 0.000303 (event t = 5.19; monthly t = 3.77). The same tuning
+procedure selects a 0.80 weight on logistic recalibration, reducing the later-sample
+Brier score by 0.000626 (event t = 4.75; monthly t = 2.60). The full-sample
+blend curves are descriptive, not tuning evidence.
 
 ![Model comparison](figures/models/fig2_1_model_ladder.png)
 
@@ -177,9 +180,9 @@ In the closure-proxy robustness comparison (70,673 evaluated observations,
 27 test months and 7,039 event clusters), the price scores 0.0744532.
 Isotonic scores 0.0742677 (event t = 1.42; monthly t = -0.43),
 logistic 0.0743569 (1.46; -1.22) and the full GBM
-0.0740909 (0.95; 0.73). The GBM without text features has the
-lowest pooled score, 0.0730686, a 1.86% reduction relative to the price
-(event t = 3.82; monthly t = 1.28). Model rankings therefore depend on the date
+0.0740295 (1.08; 0.48). The GBM without text features has the
+lowest pooled score, 0.0730941, a 1.83% reduction relative to the price
+(event t = 3.75; monthly t = 1.11). Model rankings therefore depend on the date
 anchoring. This comparison is retrospective: its snapshots and horizon feature
 are measured back from a closure time that is not known in advance.
 
@@ -199,14 +202,15 @@ Repeated horizons and related markets can represent overlapping positions.
 
 | Model disagreement threshold | Trades | Mean return after 1 cent | Event t | Monthly t |
 | --- | ---: | ---: | ---: | ---: |
-| 2 points | 24,694 | -5.39% | -3.35 | -1.97 |
-| 5 points | 13,391 | 1.89% | 0.93 | 0.29 |
-| 10 points | 6,234 | 7.98% | 2.36 | 0.94 |
+| 2 points | 24,772 | -5.70% | -3.58 | -2.41 |
+| 5 points | 13,456 | 0.50% | 0.23 | 0.11 |
+| 10 points | 6,214 | 9.44% | 2.79 | 1.02 |
 
 These are price-based signal tests, not evidence of achievable portfolio returns.
 Calibration backtests group monthly returns by closure-proxy month; model
 backtests and forecast comparisons group by snapshot month. Cluster mean tests
-use asymptotic CR0 errors. Monthly t statistics assume independent month means;
+use asymptotic CR0 errors; standard errors and t statistics are undefined when
+only one event is available. Monthly t statistics assume independent month means;
 they are not adjusted for serial correlation. Model selection and multiple
 comparisons on the same retrospective dataset remain limitations.
 
@@ -269,7 +273,7 @@ python code/11_figures2.py
 
 `12` must precede `11`, which reads its supplementary comparisons. Each stage
 overwrites its generated outputs. The complete sequence was last executed on
-18 October 2026 with Python 3.11.7 and the pinned dependencies.
+27 October 2026 with Python 3.11.7 and the pinned dependencies.
 Random seeds are 42; numeric results can vary between library builds and platforms.
 For efficient fitting, set `OPENBLAS_NUM_THREADS=1` and
 `VECLIB_MAXIMUM_THREADS=1` before starting Python; LightGBM itself uses four threads.
@@ -291,9 +295,11 @@ complete records and conflicting timestamps fail explicitly. Metadata pagination
 splits crowded date windows and reports a failure if the window cannot be split
 further. Successful saved IDs are retained rather than refreshed.
 
-Bounded live smoke checks retrieved one Gamma market and one CLOB history on
-1 October 2026. A complete new collection was not run. API coverage, pagination
-behavior and metadata can change, so these checks do not prove universe completeness.
+Bounded live smoke checks through the collector functions retrieved one Gamma
+market and a CLOB history with 264 quotes on 27 October 2026 at 01:16 HKT.
+The historical inputs were unchanged, and a complete new collection was not run.
+API coverage, pagination behavior and metadata can change, so these checks do
+not prove universe completeness.
 
 ## Design and limits
 
@@ -314,15 +320,21 @@ behavior and metadata can change, so these checks do not prove universe complete
   quotes supply a fallback when creation is missing. Future-created siblings
   do not contribute. Lifetime volume and current liquidity are excluded as
   predictors, although lifetime volume still determines sample selection.
-  Invalid scheduled lifetimes become missing features; positive lifetimes use
-  the actual denominator, even for unusually short schedules or late closures.
+  Elapsed lifetime is `(snapshot - creation) / (scheduled end - creation)`,
+  using the same creation-time origin in both terms. When creation is missing,
+  both use the first observed quote. Nonpositive scheduled lifetimes become
+  missing features; late closure-proxy snapshots can have fractions above 1.
 - Monthly training requires both snapshot and closure proxy to precede the
   test month. Test events appearing in training are excluded. The first six
   observed snapshot months form burn-in; folds need at least 500 training rows.
-- TF-IDF/SVD is fitted only on eligible burn-in data. Early stopping holds out
+- Category indicators use only categories observed in the current fold's
+  eligible training rows. Unseen test categories receive all-zero indicators.
+  TF-IDF/SVD is fitted only on eligible burn-in data. Early stopping holds out
   entire events ordered by their latest training snapshot. Its selected tree
-  count is then refitted on every eligible training row. Single-class cases
-  use explicit binary probabilities or the fixed training budget.
+  count is then refitted on every eligible training row. Single-class training
+  uses explicit binary probabilities. With only one event and both outcomes,
+  or a single-class early-stopping fit partition, the GBM uses its predetermined
+  tree budget without an event holdout.
 - Blend tuning uses only closure proxies preceding its fixed cutoff, followed by
   evaluation on later rows from different events. Fold sizes and timestamp
   bounds are recorded in the model metrics; predictions retain snapshot times.

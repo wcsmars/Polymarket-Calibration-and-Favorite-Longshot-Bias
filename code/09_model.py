@@ -92,11 +92,21 @@ class ConstantBinaryModel:
 
 def fit_gbm_model(Xtr, ytr, ttr, gtr):
     """Select tree count on held-out events, then refit all eligible training rows."""
+    if not (len(Xtr) == len(ytr) == len(ttr) == len(gtr)):
+        raise ValueError("Training features, outcomes, times and event groups must align.")
+    if pd.isna(np.asarray(ttr)).any() or pd.isna(np.asarray(gtr)).any():
+        raise ValueError("Training times and event groups must be nonmissing.")
     outcomes = np.unique(np.asarray(ytr))
     if not len(outcomes) or not np.isin(outcomes, [0, 1]).all():
         raise ValueError("Training outcomes must be nonempty and binary.")
     if len(outcomes) == 1:
         return ConstantBinaryModel(outcomes[0])
+    # One event can contain many binary markets, but cannot be split into
+    # independent fit and validation groups. Keep the predetermined tree budget.
+    if pd.Series(gtr).nunique() < 2:
+        model = lgb.LGBMClassifier(**LGB_PARAMS)
+        model.fit(Xtr, ytr)
+        return model
     fit_mask, va_mask = es_split(ttr, gtr)
     # A single-class tail split cannot learn the binary mapping correctly.
     # Use the fixed training budget in this case, never test outcomes.
@@ -165,6 +175,30 @@ def add_text_features(d, burn):
     return d, txt_cols
 
 
+def add_category_features(d, train):
+    """Encode only categories observed in the eligible training sample."""
+    levels = sorted(train["cat"].dropna().unique())
+    cats = pd.Series(pd.Categorical(d["cat"], categories=levels), index=d.index)
+    encoded = pd.get_dummies(cats, prefix="cat")
+    return pd.concat([d, encoded], axis=1), list(encoded.columns)
+
+
+def dm_clustered(loss_a, loss_b, cluster):
+    """Mean paired loss improvement and event-clustered CR0 uncertainty."""
+    frame = pd.DataFrame({"d": np.asarray(loss_a) - np.asarray(loss_b),
+                          "event": np.asarray(cluster)})
+    if frame.empty:
+        return np.nan, np.nan, np.nan
+    if frame["event"].isna().any() or not np.isfinite(frame["d"]).all():
+        raise ValueError("Paired loss inference requires finite losses and event IDs.")
+    groups = frame.groupby("event")["d"].agg(["sum", "size"])
+    n = groups["size"].sum()
+    mean = groups["sum"].sum() / n
+    se = (np.sqrt(((groups["sum"] - mean * groups["size"]) ** 2).sum()) / n
+          if len(groups) > 1 else np.nan)
+    return float(mean), float(se), float(mean / se) if se > 0 else np.nan
+
+
 def run_anchor(df, anchor):
     source = df[df["anchor"] == anchor].copy()
     d = eligible_snapshots(source)
@@ -177,9 +211,6 @@ def run_anchor(df, anchor):
     d["snap_month"] = pd.to_datetime(d["snap_ts"], unit="s", utc=True).dt.strftime("%Y-%m")
     if d.duplicated(["id", "h"]).any():
         raise ValueError(f"Duplicate market/horizon rows for {anchor}.")
-    cat_dum = pd.get_dummies(d["cat"], prefix="cat")
-    d = pd.concat([d, cat_dum], axis=1)
-    cat_cols = list(cat_dum.columns)
 
     months = sorted(d["snap_month"].unique())
     if len(months) <= BURN_IN_MONTHS:
@@ -189,13 +220,6 @@ def run_anchor(df, anchor):
     burn_cutoff = pd.Timestamp(months[BURN_IN_MONTHS] + "-01", tz="UTC")
     burn_train = d[training_eligible(d, burn_cutoff)]
     d, txt_cols = add_text_features(d, burn_train)
-
-    FEATSETS = {
-        "gbm_price": PRICE_FEATS,
-        "gbm_path": PRICE_FEATS + PATH_FEATS,
-        "gbm_notext": PRICE_FEATS + PATH_FEATS + STRUCT_FEATS + cat_cols,
-        "gbm_full": PRICE_FEATS + PATH_FEATS + STRUCT_FEATS + cat_cols + txt_cols,
-    }
 
     preds = []
     folds = []
@@ -218,6 +242,17 @@ def run_anchor(df, anchor):
             folds.append({"month": m, "n_train": len(train), "n_excluded_event_overlap": excluded,
                           "status": "all_events_seen"})
             continue
+
+        # New categories in later months cannot change an earlier fold's
+        # feature schema. Unseen test categories receive all-zero indicators.
+        test, cat_cols = add_category_features(test, train)
+        train, _ = add_category_features(train, train)
+        FEATSETS = {
+            "gbm_price": PRICE_FEATS,
+            "gbm_path": PRICE_FEATS + PATH_FEATS,
+            "gbm_notext": PRICE_FEATS + PATH_FEATS + STRUCT_FEATS + cat_cols,
+            "gbm_full": PRICE_FEATS + PATH_FEATS + STRUCT_FEATS + cat_cols + txt_cols,
+        }
 
         out = test[["id", "event_id", "h", "snap_month", "y", "p", "cat",
                     "active_frac", "event_n_markets", "t_res", "snap_ts"]].copy()
@@ -260,15 +295,6 @@ def run_anchor(df, anchor):
         pc = np.clip(p, 1e-6, 1 - 1e-6)
         return float(-np.mean(P["y"] * np.log(pc) + (1 - P["y"]) * np.log(1 - pc)))
 
-    def dm_clustered(loss_a, loss_b, cluster):
-        """mean(loss_a - loss_b) with cluster-sum SE; positive = b better"""
-        dif = pd.Series(loss_a - loss_b)
-        g = dif.groupby(cluster).agg(["sum", "size"])
-        n = g["size"].sum()
-        mean = g["sum"].sum() / n
-        se = np.sqrt(((g["sum"] - mean * g["size"]) ** 2).sum()) / n
-        return float(mean), float(se), float(mean / se) if se > 0 else np.nan
-
     def dm_monthly(loss_a, loss_b, month):
         dif = pd.DataFrame({"d": loss_a - loss_b, "m": month}).groupby("m")["d"].mean()
         t = dif.mean() / (dif.std() / np.sqrt(len(dif))) if dif.std() > 0 else np.nan
@@ -304,16 +330,12 @@ def run_anchor(df, anchor):
         s = P[P["h"] == h]
         lps = (s["p"] - s["y"]) ** 2
         lms = (s["pred_gbm_full"] - s["y"]) ** 2
-        dif = pd.Series(lps.values - lms.values)
-        g = dif.groupby(s["event_id"].values).agg(["sum", "size"])
-        n = g["size"].sum()
-        mean = g["sum"].sum() / n
-        se = np.sqrt(((g["sum"] - mean * g["size"]) ** 2).sum()) / n
+        _, _, t = dm_clustered(lps.values, lms.values, s["event_id"].values)
         res["by_horizon"][int(h)] = {
             "n": int(len(s)),
             "brier_price": float(np.mean(lps)),
             "brier_gbm_full": float(np.mean(lms)),
-            "dm_t": float(mean / se) if se > 0 else np.nan,
+            "dm_t": t,
         }
     return res
 

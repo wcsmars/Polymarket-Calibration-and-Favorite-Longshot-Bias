@@ -84,6 +84,19 @@ class RawIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "count mismatch"):
                 data_io.load_histories(path)
 
+    def test_conflicting_successful_histories_cannot_silently_replace_quotes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "history.jsonl"
+            record = {"id": "a", "n": 2, "history": [[10, .3], [20, .5]]}
+            write_jsonl(path, [record, {**record, "history": [[20, .5], [10, .3]]}])
+            np.testing.assert_array_equal(data_io.load_histories(path)["a"], record["history"])
+            for replacement in [[[10, .8], [20, .5]], [[10, .3]], []]:
+                write_jsonl(path, [record, {"id": "a", "n": len(replacement),
+                                           "history": replacement}])
+                with self.subTest(history=replacement), self.assertRaisesRegex(
+                        ValueError, "Conflicting successful histories"):
+                    data_io.load_histories(path)
+
 
 class CollectionRegressionTests(unittest.TestCase):
     def test_price_error_payload_is_failure_not_an_empty_history(self):
@@ -214,6 +227,23 @@ class CollectionRegressionTests(unittest.TestCase):
 
 
 class ConstructionRegressionTests(unittest.TestCase):
+    def test_boolean_outcome_prices_and_equivalent_token_ids_are_excluded(self):
+        base = {"id": "valid", "closed": True, "outcomes": ["Yes", "No"],
+                "outcomePrices": [1, 0], "clobTokenIds": ["yes", "no"],
+                "closedTime": "2025-02-01T00:00:00Z",
+                "createdAt": "2025-01-01T00:00:00Z", "endDate": "2025-02-01T00:00:00Z",
+                "volumeNum": 1000}
+        records = [base, {**base, "id": "boolean", "outcomePrices": [True, False]},
+                   {**base, "id": "same-token", "clobTokenIds": ["yes", " yes "]}]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw, out = root / "raw.jsonl", root / "sample.csv"
+            write_jsonl(raw, records)
+            with patch.object(sample, "RAW", str(raw)), patch.object(sample, "OUT", str(out)), \
+                    patch.object(sample, "ROOT", root), patch("builtins.print"):
+                sample.main()
+            self.assertEqual(pd.read_csv(out).id.tolist(), ["valid"])
+
     def test_native_lists_reversed_outcomes_and_boolean_strings(self):
         base = {"id": "1", "closed": True, "outcomes": ["No", "Yes"],
                 "outcomePrices": [0, 1], "clobTokenIds": ["no", "yes"],
@@ -352,6 +382,30 @@ class ConstructionRegressionTests(unittest.TestCase):
                 self.assertTrue(pd.isna(resolved.at[identifier, "frac_life"]))
             self.assertAlmostEqual(resolved.at["short", "frac_life"], 9 / .05)
             self.assertAlmostEqual(resolved.at["late", "frac_life"], 9 / 2)
+
+    def test_scheduled_lifetime_fraction_uses_creation_even_when_quotes_start_later(self):
+        base = pd.Timestamp("2025-01-01T00:00:00Z")
+        rows = [{"id": identifier, "yes_token": identifier, "event_id": identifier,
+                 "event_neg_risk": False, "negRisk": False, "y": 1, "cat": "other",
+                 "question": "Will this occur?", "volumeNum": 1000,
+                 "t_created": base if identifier == "known" else pd.NaT,
+                 "t_res": base + pd.Timedelta(days=10), "t_end": base + pd.Timedelta(days=10)}
+                for identifier in ["known", "missing"]]
+        history = [[(base + pd.Timedelta(days=day)).timestamp(), .3] for day in range(4, 10)]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            processed = root / "data" / "processed"
+            processed.mkdir(parents=True)
+            pd.DataFrame(rows).to_csv(processed / "sample_markets.csv", index=False)
+            write_jsonl(root / "data" / "raw" / "price_histories.jsonl",
+                        [{"id": row["id"], "n": len(history), "history": history} for row in rows])
+            with patch.object(features, "ROOT", root), patch.object(features, "HORIZONS", [1]), \
+                    patch("builtins.print"):
+                features.main()
+            dataset = pd.read_parquet(processed / "ml_dataset.parquet")
+            for row in dataset.itertuples():
+                self.assertEqual(row.days_live, 5)  # observed price-history span is unchanged
+                self.assertAlmostEqual(row.frac_life, .9 if row.id == "known" else 5 / 6)
 
 
 if __name__ == "__main__":
